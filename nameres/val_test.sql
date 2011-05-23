@@ -1,79 +1,138 @@
+-- UDFs for doit value comparisons
 
-create or replace function init_val_test () returns void as
+-- Initialize the value test schema
+create or replace function val_test_init () returns void as
 $$
 begin
-
--- reload testing schema
-if schema_exists('val_test') then
+  -- reload testing schema
+  if schema_exists('val_test') then
 	drop schema val_test cascade;
-end if;
-create schema val_test;
+  end if;
+  create schema val_test;
 
--- testing tables, views, and indexes
-create table val_test.tf as
-select *
-  from training.val_tf;
+  -- Holds sources to use for testing
+  create table val_test.sources (source_id integer);
 
-create index idx_val_tf_gram on val_test.tf (gram);
-create index idx_val_tf_tag_code on val_test.tf (tag_code);
+  -- Auxillary tables/views for testing
+  create view val_test.qgrams_input as
+       select name, qgrams2(value,3) gram
+         from doit_data
+        where source_id
+           in (select source_id from val_test.sources)
+          and value is not null;
 
-create view val_test.dict_count as
-select count(distinct tag_code) c
-  from training.fields;
+  create table val_test.qgrams_results (
+       name text,
+       match text,
+       score float
+  );
 
-create table val_test.dict_matches (
-	name text,
-	match text,
-	uncertainty float
-);
+  create view val_test.ngrams_input as
+  select null;
 
-insert into val_test.dict_matches (name,match,uncertainty)
-select distinct tag_code, '', 0.0
-  from training.fields;
+  create table val_test.ngrams_results (
+       name text,
+       match text,
+       score float
+  );
 
-update val_test.dict_matches
-   set match = name;
 
-create table val_test.idf as
-  select g.gram, sqrt(log(c.c::float / count(distinct g.tag_code)::float)) score
-    from training.val_grams g, val_test.dict_count c
-group by g.gram, c.c;
+  -- For idf calculations
+  create view val_test.dict_count as
+       select count(distinct tag_code) c
+         from training.fields;
 
-create index idx_val_idf_gram on val_test.idf (gram);
 
-create table val_test.dict_lengths as
-  select tag_code, sum(c) c
-    from training.val_grams
-group by tag_code;
+  -- Tables/views for qgrams tf-idf (created but not populated)
+  create view val_test.raw_qgrams as
+       select tag_code, qgrams2(value,3) gram
+         from training.data
+        where value is not null;
 
-create table val_test.input (
-	name text,
-	gram text
-);
+  create view val_test.qgrams as
+       select tag_code, gram, count(gram) c
+         from val_test.raw_qgrams
+     group by tag_code, gram;
+
+  create table val_test.qgrams_tf (
+       tag_code text,
+       gram text,
+       score float
+  );
+
+  create table val_test.qgrams_idf (
+       gram text,
+       score float
+  );
+
+
+-- Tables/views for ngrams tf-idf (created but not populated)
+-- coming soon...
 
 end
 $$ language plpgsql;
 
 
-create or replace function val_test_source (integer) returns void
+-- Loads data from training schema for use with future testing
+create or replace function val_test_load_qgrams_training () returns void
 as $$
 begin
-delete from val_test.input;
+  if index_exists('index idx_val_tf_gram') then
+     drop index idx_val_tf_gram;
+  end if;
 
-insert into val_test.input (name, gram)
-select name, qgrams2(value,3)
-  from doit_data
- where source_id = $1
-   and value is not null;
+   if index_exists('index idx_val_tf_tag_code') then
+     drop index idx_val_tf_tag_code;
+   end if;
 
-create view val_test.results as
-   select i.name, tf.tag_code, sum(tf.score*idf.score) score
-     from val_test.input i, val_test.tf, val_test.idf
-    where i.gram = tf.gram
-      and tf.gram = idf.gram
- group by i.name, tf.tag_code
- order by i.name asc, score desc;
+  if index_exists('index idx_val_idf_gram') then
+     drop index idx_val_idf_gram;
+  end if;
 
+  delete from val_test.qgrams_tf;
+  delete from val_test.qgrams_idf;
+
+  insert into val_test.qgrams_tf (tag_code, gram, score)
+       select tag_code, gram, log(1+c)
+         from val_test.qgrams;
+
+  create index idx_val_tf_gram on val_test.qgrams_tf (gram);
+  create index idx_val_tf_tag_code on val_test.qgrams_tf (tag_code);
+
+  insert into val_test.qgrams_idf (gram, score)
+       select g.gram, sqrt(log(c.c::float / count(distinct g.tag_code)::float))
+         from val_test.qgrams g, val_test.dict_count c
+     group by g.gram, c.c;
+
+  create index idx_val_idf_gram on val_test.qgrams_idf (gram);
+
+end
+$$ language plpgsql;
+
+
+-- Adds a source to the test list val_test.sources
+create or replace function val_test_add_source (integer) returns integer
+as $$
+begin
+	insert into val_test.sources (source_id) values ($1);
+	return $1;
+end
+$$ language plpgsql;
+
+
+-- Loads results for qgram test into val_test.qgrams_results
+-- Uses any loaded training data, and test source list in val_test.sources
+create or replace function val_test_load_qgrams_results () returns void
+as $$
+begin
+	delete from val_test.qgrams_results;
+
+	insert into val_test.qgrams_results (name, match, score)
+   	     select i.name, tf.tag_code, sum(tf.score*idf.score)
+     	       from val_test.qgrams_input i, val_test.qgrams_tf tf, val_test.qgrams_idf idf
+    	      where i.gram = tf.gram
+      	        and tf.gram = idf.gram
+ 	   group by i.name, tf.tag_code;
 end
 $$ language plpgsql;
 
