@@ -11,12 +11,19 @@ begin
   create table syn_test.sources (source_id integer);
 
   create view syn_test.input as
-       select name, qgrams2(name, 3) gram
+       select source_id, name, qgrams2(name, 3) gram
+         from doit_fields
+        where source_id
+           in (select source_id from syn_test.sources);
+
+  create view syn_test.targets as
+       select source_id, name
          from doit_fields
         where source_id
            in (select source_id from syn_test.sources);
 
   create table syn_test.results (
+       source_id integer,
        name text,
        match text,
        score float
@@ -70,11 +77,17 @@ as $$
 begin
 	delete from syn_test.results;
 
-	insert into syn_test.results (name, match, score)
-	     select i.name, tf.tag_code, sum(tf.score*idf.score)
+	insert into syn_test.results (source_id, name, match, score)
+	     select t.source_id, t.name, a.tag_code, a.score
+	       from syn_test.targets t
+	  left join (
+	     select i.source_id, i.name, tf.tag_code, sum(tf.score*idf.score) score
 	       from syn_test.input i, syn_test.qgrams_tf tf, syn_test.qgrams_idf idf
 	      where i.gram = tf.gram
 		and tf.gram = idf.gram
-	   group by i.name, tf.tag_code;
+	   group by i.source_id, i.name, tf.tag_code
+	            ) a
+	         on t.source_id = a.source_id
+                and t.name = a.name;
 end
 $$ language plpgsql;
