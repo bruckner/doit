@@ -1,4 +1,23 @@
 
+-- Safe text-to-numeric extractor; returns null if s is nonnumeric
+create or replace function to_num (s text) returns numeric as
+$$
+
+if (s is None):
+   return s
+
+try:
+    n = float(s)
+    if (n == float('inf') or n == float('-inf') or n == float('nan')):
+        return None
+    else:
+        return n
+except ValueError:
+    return None
+
+$$ language plpythonu;
+
+
 -- Generate a list of random source_ids
 -- First arg in # sources, second it max source size (in entities)
 create or replace function random_source_list (integer, integer) returns setof integer
@@ -49,3 +68,26 @@ as '
 	     from pg_indexes
 	    where indexname = $1);
 ' language sql;
+
+
+-- Aggregate function for string concatenation
+create or replace function agg_concat (agg_str text, delim text, new_str text)
+       returns text
+as $$
+begin
+	if new_str is null then
+	   return agg_str;
+	else
+	   return agg_str || delim || new_str;
+	end if;
+end
+$$ language plpgsql;
+
+drop aggregate if exists group_concat (text, text);
+
+create aggregate group_concat (text, text) (
+       stype = text,
+       sfunc = agg_concat,
+       initcond = ''
+);
+
