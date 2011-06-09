@@ -2,13 +2,14 @@
 -- Safe text-to-numeric extractor; returns null if s is nonnumeric
 create or replace function to_num (s text) returns numeric as
 $$
+import math
 
 if (s is None):
    return s
 
 try:
     n = float(s)
-    if (n == float('inf') or n == float('-inf') or n == float('nan')):
+    if (math.isinf(n) or math.isnan(n)):
         return None
     else:
         return n
@@ -25,7 +26,7 @@ as '
 select source_id
   from (
     select source_id, random() x
-      from doit_sources
+      from public.doit_sources
      where n_entities <= $2
   order by x desc
      limit $1
