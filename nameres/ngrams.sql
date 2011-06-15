@@ -44,27 +44,24 @@ CREATE TABLE val_ngrams (
        c integer,
        tf float NULL
 );
-CREATE INDEX idx_val_ngrams_gram ON val_ngrams (gram);
-CREATE INDEX idx_val_ngrams_att_id ON val_ngrams (att_id, gram);
+ALTER TABLE val_ngrams ADD PRIMARY KEY (gram, att_id);
 
 -- Merge function for val_ngrams: $1 - att_id; $2 - gram; $3 - c
 CREATE OR REPLACE FUNCTION merge_val_ngrams (integer, text, bigint) RETURNS void AS
 $$
 BEGIN
-  LOOP
+--  LOOP
     UPDATE val_ngrams SET c = c + $3 WHERE att_id = $1 AND gram = $2;
     IF found THEN
-       UPDATE val_ngrams_doc_lens SET len = len + $3 WHERE att_id = $1;
        RETURN;
     END IF;
     BEGIN
       INSERT INTO val_ngrams (att_id,gram,c) VALUES ($1,$2,$3);
-      PERFORM merge_val_ngrams_doc_lens($1,$3);
       RETURN;
     EXCEPTION WHEN unique_violation THEN
       NULL;
     END;
-  END LOOP;
+--  END LOOP;
 END
 $$ LANGUAGE plpgsql;
 
@@ -73,26 +70,6 @@ CREATE TABLE val_ngrams_doc_lens (
        att_id integer,
        len integer
 );
-CREATE INDEX idx_val_ngrams_doc_lens_att_id ON val_ngrams_doc_lens (att_id);
-
--- Merge function for val_ngrams_doc_lens: $1 - att_id; $2 - len
-CREATE OR REPLACE FUNCTION merge_val_ngrams_doc_lens (integer, bigint) RETURNS void AS
-$$
-BEGIN
-  LOOP
-    UPDATE val_ngrams_doc_lens SET len = len + $2 WHERE att_id = $1;
-    IF found THEN
-       RETURN;
-    END IF;
-    BEGIN
-      INSERT INTO val_ngrams_doc_lens (att_id,len) VALUES ($1,$2);
-      RETURN;
-    EXCEPTION WHEN unique_violation THEN
-      NULL;
-    END;
-  END LOOP;
-END
-$$ LANGUAGE plpgsql;
 
 
 CREATE TABLE val_ngrams_idf (
@@ -100,7 +77,7 @@ CREATE TABLE val_ngrams_idf (
 	 df integer,
 	 idf float NULL
 );
-CREATE INDEX idx_val_ngrams_idf_gram ON val_ngrams_idf (gram);
+ALTER TABLE val_ngrams_idf ADD PRIMARY KEY (gram);
 
 -- Merge function for val_ngrams_idf: $1 - gram; $2 - df; $3 - #docs
 CREATE OR REPLACE FUNCTION merge_val_ngrams_idf (text, bigint, integer) RETURNS void AS
@@ -148,6 +125,13 @@ BEGIN
      FROM in_val_ngrams i, attribute_clusters g
     WHERE i.source_id = g.local_source_id
       AND i.name = g.local_name;
+
+  -- Update document lengths
+  DELETE FROM val_ngrams_doc_lens;
+  INSERT INTO val_ngrams_doc_lens (att_id, len)
+       SELECT att_id, SUM(c)
+         FROM val_ngrams
+     GROUP BY att_id;
 
   -- Merge incoming grams into val_ngrams_idf table
   PERFORM merge_val_ngrams_idf(i.gram, COUNT(*), att_count)
