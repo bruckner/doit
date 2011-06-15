@@ -1,109 +1,98 @@
 
-create or replace function dist_init () returns void as
+-- Housekeeping
+DROP TABLE IF EXISTS val_dists CASCADE;
+DROP VIEW IF EXISTS in_val_dist_sums;
+DROP VIEW IF EXISTS in_val_dists;
+
+CREATE OR REPLACE FUNCTION dist_flush () RETURNS void AS
 $$
-begin
-  if schema_exists('dist') then
-     drop schema dist cascade;
-  end if;
-  create schema dist;
+BEGIN
+  RETURN;
+END
+$$ LANGUAGE plpgsql;
 
-  -- Global data lives here
-  create table dist.global_dists (
-  	 tag_code text,
-	 n integer,
-	 mean float,
-	 variance float
-  );
-
-  -- Incoming local data lives here
-  create table dist.sources (source_id integer);
-
-  create table dist.input (
-  	 source_id integer,
-	 name text,
-	 value numeric
-  );
-
-  -- Scores, results, output live here
-  create table dist.results (
-  	 source_id integer,
-	 name text,
-	 match text,
-	 score float
-  );
-
-  -- Tables/views for computations
-  create view dist.sums as
-       select source_id, name, count(*) n,
-              sum(value::float)::float sm, sum(value::float*value::float)::float smsqr
-         from dist.input
-	where to_num(value::text) is not null
-     group by source_id, name;
-
-  create view dist.local_dists as
-       select source_id, name, n, sm/n mean, (smsqr - sm*sm/n) / (n-1) variance
-         from dist.sums
-	where n > 1;
-end
-$$ language plpgsql;
-
-
-create or replace function dist_load_training () returns void as
+CREATE OR REPLACE FUNCTION dist_clean () RETURNS void AS
 $$
-begin
-  delete from dist.global_dists;
-
-  insert into dist.global_dists (tag_code, n, mean, variance)
-       select tag_code, n, sm/n mean, (smsqr - sm*sm/n)/n variance
-         from (select tag_code, count(*) n,
-	              sum(value::float)::float sm, sum(value::float*value::float)::float smsqr
-	         from training.data
-		where to_num(value) is not null
-	     group by tag_code) s
-	where n > 1;
-end
-$$ language plpgsql;
+BEGIN
+  DELETE FROM val_dists;
+END
+$$ LANGUAGE plpgsql;
 
 
-create or replace function dist_add_source (integer) returns integer as
+-- Global data lives here
+CREATE TABLE val_dists (
+       att_id integer,
+       n integer,
+       mean float,
+       variance float
+);
+
+
+-- Tables/views for computations
+CREATE VIEW in_val_dist_sums AS
+     SELECT source_id, name, COUNT(*) n,
+            SUM(value::float)::float sm, SUM(value::float*value::float)::float smsqr
+       FROM in_data
+      WHERE to_num(value::text) IS NOT NULL
+   GROUP BY source_id, name;
+
+CREATE VIEW in_val_dists AS
+     SELECT source_id, name, n, sm/n mean, (smsqr - sm*sm/n) / (n-1) variance
+       FROM in_val_dist_sums
+      WHERE n > 1;
+
+
+-- Load incoming distribution data into the global set
+CREATE OR REPLACE FUNCTION dist_load () RETURNS void AS
 $$
-begin
-	insert into dist.sources (source_id) values ($1);
-	return $1;
-end
-$$ language plpgsql;
+BEGIN
+  -- NB: Each local distribution is kept intact in the global dists table.
+  INSERT INTO val_dists (att_id, n, mean, variance)
+       SELECT g.global_id, i.n, i.mean, i.variance
+         FROM in_val_dists i, attribute_clusters g
+	WHERE i.source_id = g.local_source_id
+	  AND i.name = g.local_name;
+END
+$$ LANGUAGE plpgsql;
 
-create or replace function dist_load_test () returns void as
+
+-- Load up results!
+CREATE OR REPLACE FUNCTION dist_results () RETURNS void AS
 $$
-begin
-  delete from dist.input;
-
-  insert into dist.input (source_id, name, value)
-       select source_id, name, value::numeric
-         from doit_data
-	where source_id
-	   in (select source_id from dist.sources)
-	  and to_num(value) is not null;
-end
-$$ language plpgsql;
+BEGIN
+  INSERT INTO nr_raw_results (source_id, name, method_name, match, score)
+       SELECT *
+         FROM (SELECT a.source_id, a.name, 'dist', b.att_id, 
+                      dist_t_test(a.n, b.n, a.mean, b.mean, a.variance, b.variance) p
+                 FROM in_val_dists a, val_dists b) t
+        WHERE p < 1.0;
+END
+$$ LANGUAGE plpgsql;
 
 
-create or replace function dist_load_results () returns void as
+-- Welch's t-test for comparing samples with unequal size and variance
+CREATE OR REPLACE FUNCTION dist_t_test (
+       n1 bigint, n2 bigint,
+       m1 float,   m2 float,
+       v1 float,   v2 float
+) RETURNS float AS
 $$
-begin
-  delete from dist.results;
 
-  insert into dist.results (source_id, name, match, score)
-       select source_id, name, tag_code, greatest(mrat, vrat) score
-         from (select l.source_id, l.name, g.tag_code,
-	              greatest(abs(l.mean),abs(g.mean))/least(abs(l.mean),abs(g.mean)) mrat,
-		      greatest(abs(l.variance)/abs(g.variance)) / 
-		      least(abs(l.variance),abs(g.variance)) vrat
-          	 from dist.local_dists l, dist.global_dists g
-		where l.mean != 0
-		  and l.variance != 0
-		  and g.mean != 0
-		  and g.variance != 0) t;
-	--where (mrat < 1.1 and mrat > 0.9) and (vrat < 1.1 and vrat > 0.9);
-end
-$$ language plpgsql;
+import math
+import stats
+
+if (n1 < 2 or n2 < 2):
+   return 2;
+
+s1 = v1 / n1
+s2 = v2 / n2
+
+if (s1 <= 0 or s2 <= 0):
+   return 3;
+
+t = abs(m1 - m2) / math.sqrt(s1 + s2)
+df = (s1 + s2)**2 / (s1**2 / (n1-1) + s2**2 / (n2-1))
+
+return 1.0 - stats.lbetai(float(df)/2, 0.5, float(df) / (df + t**2))
+
+$$ LANGUAGE plpythonu;

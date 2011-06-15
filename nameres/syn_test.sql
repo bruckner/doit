@@ -1,93 +1,124 @@
-create or replace function syn_test_init () returns void as
+-- Tables/views/UDFs for synonym matching component of name resolver
+
+-- Housekeeping
+DROP VIEW IF EXISTS in_att_raw_qgrams CASCADE;
+DROP VIEW IF EXISTS in_att_qgrams CASCADE;
+DROP TABLE IF EXISTS att_qgrams CASCADE;
+DROP TABLE IF EXISTS att_qgrams_idf CASCADE;
+
+CREATE OR REPLACE FUNCTION att_qgrams_flush () RETURNS void AS
 $$
-begin
-  -- reload testing schema
-  if schema_exists('syn_test') then
-	drop schema syn_test cascade;
-  end if;
-  create schema syn_test;
+BEGIN
+  RETURN;
+END
+$$ LANGUAGE plpgsql;
 
-  -- Auxillary tables/views for testing
-  create table syn_test.sources (source_id integer);
-
-  create view syn_test.input as
-       select source_id, name, qgrams2(name, 3) gram
-         from doit_fields
-        where source_id
-           in (select source_id from syn_test.sources);
-
-  create view syn_test.targets as
-       select source_id, name
-         from doit_fields
-        where source_id
-           in (select source_id from syn_test.sources);
-
-  create table syn_test.results (
-       source_id integer,
-       name text,
-       match text,
-       score float
-  );
-
-  create view syn_test.name_count as
-       select count(distinct name || source_id) c
-         from training.fields;
+CREATE OR REPLACE FUNCTION att_qgrams_clean () RETURNS void AS
+$$
+BEGIN
+  DELETE FROM att_qgrams;
+  DELETE FROM att_qgrams_idf;
+END
+$$ LANGUAGE plpgsql;
 
 
-  -- Tables/views for qgrams tf-idf
-  create view syn_test.raw_qgrams as
-       select tag_code, qgrams2(name,3) gram
-         from training.fields;
+-- Tables/views for qgrams tf-idf
+CREATE VIEW in_att_raw_qgrams AS
+     SELECT source_id, name, qgrams2(name,3) gram
+       FROM in_fields;
 
-  create view syn_test.qgrams as
-       select tag_code, gram, count(gram) c
-         from syn_test.raw_qgrams
-     group by tag_code, gram;
+CREATE VIEW in_att_qgrams AS
+     SELECT source_id, name, gram, count(gram) c
+       FROM in_att_raw_qgrams
+   GROUP BY source_id, name, gram;
 
-  create table syn_test.qgrams_tf as
-  select tag_code, gram, log(1+c) score
-    from syn_test.qgrams;
+CREATE TABLE att_qgrams (
+       id serial,
+       att_id integer,
+       gram text,
+       c integer,
+       tf float
+);
+CREATE INDEX idx_att_qgrams_gram ON att_qgrams (gram);
+CREATE INDEX idx_att_qgrams_att_id ON att_qgrams (att_id);
 
-  create index idx_syn_qgrams_tf_gram on syn_test.qgrams_tf (gram);
-  create index idx_syn_qgrams_tf_tag_code on syn_test.qgrams_tf (tag_code);
-
-  create table syn_test.qgrams_idf as
-        select g.gram, sqrt(log(c.c::float / count(distinct g.tag_code)::float)) score
-	  from syn_test.qgrams g, syn_test.name_count c
-      group by g.gram, c.c;
-
-  create index idx_syn_qgrams_idf_gram on syn_test.qgrams_idf (gram);
-
-end
-$$ language plpgsql;
-
-
--- Adds a source to the test list syn_test.sources
-create or replace function syn_test_add_source (integer) returns integer
-as $$
-begin
-	insert into syn_test.sources (source_id) values ($1);
-	return $1;
-end
-$$ language plpgsql;
+CREATE TABLE att_qgrams_idf (
+       id serial,
+       gram text,
+       df integer,
+       idf float NULL
+);
+CREATE INDEX idx_att_qgrams_idf_gram ON att_qgrams_idf (gram);
 
 
-create or replace function syn_test_load_results () returns void
-as $$
-begin
-	delete from syn_test.results;
+-- Update attribute name tf-idf tables with incoming qgrams.
+-- Assumes that local attributes have been matched to globals 
+-- in the attribute_clusters table.
+CREATE OR REPLACE FUNCTION syn_load_qgrams () RETURNS void AS
+$$
+DECLARE
+	att_count integer := COUNT(*) FROM global_attributes;
+BEGIN
 
-	insert into syn_test.results (source_id, name, match, score)
-	     select t.source_id, t.name, a.tag_code, a.score
-	       from syn_test.targets t
-	  left join (
-	     select i.source_id, i.name, tf.tag_code, sum(tf.score*idf.score) score
-	       from syn_test.input i, syn_test.qgrams_tf tf, syn_test.qgrams_idf idf
-	      where i.gram = tf.gram
-		and tf.gram = idf.gram
-	   group by i.source_id, i.name, tf.tag_code
-	            ) a
-	         on t.source_id = a.source_id
-                and t.name = a.name;
-end
-$$ language plpgsql;
+-- Add incoming qgrams to global qgrams table
+INSERT INTO att_qgrams (att_id, gram, c)
+     SELECT g.global_id, i.gram, i.c
+       FROM in_att_qgrams i, attribute_clusters g
+      WHERE i.source_id = g.local_source_id
+        AND i.name = g.local_name;
+
+-- Dedup global qgrams table
+UPDATE att_qgrams a
+   SET c = a.c + b.c
+  FROM att_qgrams b
+ WHERE a.att_id = b.att_id
+   AND a.gram = b.gram
+   AND a.id < b.id;
+
+DELETE FROM att_qgrams a
+      USING att_qgrams b
+      WHERE a.att_id = b.att_id
+        AND a.gram = b.gram
+	AND a.id > b.id;
+
+-- Recompute tf scores
+UPDATE att_qgrams
+   SET tf = ln(1+c);
+
+-- Add new grams to idf table
+INSERT INTO att_qgrams_idf (gram, df)
+     SELECT gram, COUNT(*)
+       FROM att_qgrams
+   GROUP BY gram;
+
+-- Dedup idf table
+UPDATE att_qgrams_idf a
+   SET df = a.df + b.df
+  FROM att_qgrams_idf b
+ WHERE a.gram = b.gram
+   AND a.id < b.id;
+
+DELETE FROM att_qgrams_idf a
+      USING att_qgrams_idf b
+      WHERE a.gram = b.gram
+        AND a.id > b.id;
+
+-- Recompute idf scores
+UPDATE att_qgrams_idf
+   SET idf = sqrt(ln(att_count / df));
+
+END
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION syn_load_results () RETURNS void AS
+$$
+BEGIN
+	INSERT INTO nr_raw_results (source_id, name, method_name, match, score)
+	     SELECT i.source_id, i.name, 'att_qgrams' mn, q.att_id, SUM(q.tf*idf.idf) score
+	       FROM in_att_raw_qgrams i, att_qgrams q, att_qgrams_idf idf
+	      WHERE i.gram = q.gram
+		AND q.gram = idf.gram
+	   GROUP BY i.source_id, i.name, mn, q.att_id;
+END
+$$ LANGUAGE plpgsql;

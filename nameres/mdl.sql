@@ -1,161 +1,115 @@
+-- Tables/Views/UDFs used for MDL name resolution
 
-create or replace function mdl_init () returns void as
+-- Housekeeping
+DROP TABLE IF EXISTS mdl_dictionaries CASCADE;
+
+CREATE OR REPLACE FUNCTION mdl_flush () RETURNS void AS
 $$
-begin
-  if schema_exists('mdl') then
-    drop schema mdl cascade;
-  end if;
-  create schema mdl;
+BEGIN
+  NULL;
+END
+$$ LANGUAGE plpgsql;
 
-  -- Training data lives here
-  create table mdl.dictionaries (
-  	 tag_code text,
-	 value text
-  );
-
-  -- Test data lives here
-  create table mdl.sources (source_id integer);
-
-  create table mdl.input (
-  	 source_id integer,
-	 name text,
-	 value text
-  );
-
-  create table mdl.results (
-  	 source_id integer,
-	 name text,
-	 match text,
-	 description_length float
-  );
-
-  create view mdl.output as
-       select r.source_id, r.name, r.match, f.tag_code, r.description_length
-         from (select x.*
-                 from mdl.results x,
-	             (select source_id, name, min(description_length) dl
-	                from mdl.results
-	            group by source_id, name) y
-	        where x.source_id = y.source_id
-	          and x.name = y.name
-	          and x.description_length = y.dl) r 
-   inner join doit_fields f
-           on r.source_id = f.source_id
-  	  and r.name = f.name;
-
-  -- Tables/views for computing description length
-  -- In general DL = plogm + avgValLen*(log(alphabetSize)) 
-  --               + fplog maxValLen + (f/n)sum_n(sum_p(log (# vals ok /# vals possible)))
-  -- In our case, p = 1, m = const, alphabetSize = 128, so we get
-  -- DL = avgValLen*7 + f*log maxValLen + (f/n) sum_n[log(#vals ok) - log(#vals possible)]
-  -- Where n is size of input dict, f is fraction of values accepted,
-  -- and (#vals ok/#vals possible) is length specific.
-
-  create view mdl.dict_card_by_len as
-       select tag_code, length(value) l, count(*) card
-         from mdl.dictionaries
-     group by tag_code, l;
-
-  create view mdl.input_dict_stats as
-       select source_id, name, count(*) n,
-              avg(length(value)) avglen, max(length(value)) maxlen
-         from mdl.input
-     group by source_id, name;
-
-  create view mdl.input_match_counts_by_len as
-       select i.source_id, i.name, d.tag_code, length(i.value) l, count(*) card
-         from mdl.input i, mdl.dictionaries d
-	where i.value = d.value
-     group by i.source_id, i.name, d.tag_code, l;
-/*
-        union
-       select source_id, name, 'DEFAULT' tag_code, length(value) l, 0 card
-         from mdl.input
-     group by source_id, name, tag_code, l;
-*/
-
-  create view mdl.input_match_fracs as
-       select m.source_id, m.name, m.tag_code, (sum(m.card)::float / s.n::float) f
-         from mdl.input_match_counts_by_len m, mdl.input_dict_stats s
-	where m.source_id = s.source_id
-	  and m.name = s.name
-     group by m.source_id, m.name, m.tag_code, s.n;
-
-
-  create view mdl.description_length as
-       select i.source_id, i.name, i.tag_code,
-       	      (f.f * ln(s.maxlen)) term1, (1.0 - f.f) * s.avglen * ln(128) term2,
-	      (f.f / s.n::float) * sum(ln(i.card * l.card)) term3
-       	      /*(ln(128)*s.avglen) term1, (f.f * ln(s.maxlen)) term2,
-	      (f.f / s.n::float) * sum(ln(l.card) - l.l * ln(128)) term3*/
-         from mdl.input_match_counts_by_len i, mdl.input_dict_stats s,
-	      mdl.input_match_fracs f, mdl.dict_card_by_len l
-	where i.source_id = s.source_id
-	  and i.name = s.name
-	  and i.source_id = f.source_id
-	  and i.name = f.name
-	  and i.tag_code = f.tag_code
-	  and i.tag_code = l.tag_code
-     group by i.source_id, i.name, i.tag_code, s.avglen, s.maxlen, f.f, s.n;
-
-end
-$$ language plpgsql;
-
-
-create or replace function mdl_load_training () returns void as
+CREATE OR REPLACE FUNCTION mdl_clean () RETURNS void AS
 $$
-begin
-  drop index if exists mdl.idx_dictionaries_value;
+BEGIN
+  DELETE FROM mdl_dictionaries;
+END
+$$ LANGUAGE plpgsql;
 
-  delete from mdl.dictionaries;
-
-  insert into mdl.dictionaries
-  select tag_code, value
-    from training.data
-   where value is not null
-group by tag_code, value;
-
-  create index idx_dictionaries_value on mdl.dictionaries using hash (value);
-end
-$$ language plpgsql;
+-- Preprocessed dictionary data
+CREATE TABLE mdl_dictionaries (
+       id serial,
+       att_id integer,
+       value text
+);
+CREATE INDEX idx_mdl_dictionaries_value ON mdl_dictionaries USING hash (value);
 
 
-create or replace function mdl_add_source (integer) returns integer as
+
+-- Tables/views for computing description length
+-- In general DL = plogm + avgValLen*(log(alphabetSize)) 
+--               + fplog maxValLen + (f/n)sum_n(sum_p(log (# vals ok /# vals possible)))
+-- In our case, p = 1, m = const, alphabetSize = 128, so we get
+-- DL = avgValLen*7 + f*log maxValLen + (f/n) sum_n[log(#vals ok) - log(#vals possible)]
+-- Where n is size of input dict, f is fraction of values accepted,
+-- and (#vals ok/#vals possible) is length specific.
+
+CREATE VIEW mdl_dict_card_by_len AS
+     SELECT att_id, length(value) l, COUNT(*) card
+       FROM mdl_dictionaries
+   GROUP BY att_id, l;
+
+CREATE VIEW mdl_input_dict_stats AS
+     SELECT source_id, name, COUNT(*) n,
+            AVG(length(value)) avglen, MAX(length(value)) maxlen
+       FROM in_data
+   GROUP BY source_id, name;
+
+CREATE VIEW mdl_input_match_counts_by_len AS
+     SELECT i.source_id, i.name, d.att_id, length(i.value) l, COUNT(*) card
+       FROM in_data i, mdl_dictionaries d
+      WHERE i.value = d.value
+   GROUP BY i.source_id, i.name, d.att_id, l;
+
+CREATE VIEW mdl_input_match_fracs AS
+     SELECT m.source_id, m.name, m.att_id, (SUM(m.card)::float / s.n::float) f
+       FROM mdl_input_match_counts_by_len m, mdl_input_dict_stats s
+      WHERE m.source_id = s.source_id
+        AND m.name = s.name
+   GROUP BY m.source_id, m.name, m.att_id, s.n;
+
+CREATE VIEW mdl_description_length AS
+     SELECT i.source_id, i.name, i.att_id,
+   	    (f.f * ln(s.maxlen)) term1, (1.0 - f.f) * s.avglen * ln(128) term2,
+	    (f.f / s.n::float) * SUM(ln(i.card * l.card)) term3
+       	    /*(ln(128)*s.avglen) term1, (f.f * ln(s.maxlen)) term2,
+	    (f.f / s.n::float) * sum(ln(l.card) - l.l * ln(128)) term3*/
+       FROM mdl_input_match_counts_by_len i, mdl_input_dict_stats s,
+	    mdl_input_match_fracs f, mdl_dict_card_by_len l
+      WHERE i.source_id = s.source_id
+	AND i.name = s.name
+	AND i.source_id = f.source_id
+	AND i.name = f.name
+	AND i.att_id = f.att_id
+	AND i.att_id = l.att_id
+   GROUP BY i.source_id, i.name, i.att_id, s.avglen, s.maxlen, f.f, s.n;
+
+
+-- UDF to move processed input data into MDL dictionaries.
+-- Assumes name resolution is completed, i.e. attribute_clusters
+-- has records for incoming data
+-- NB: mdl_dictionaries may contain duplicate recs after this!
+CREATE OR REPLACE FUNCTION mdl_load_dictionaries () RETURNS void AS
 $$
-begin
-	insert into mdl.sources (source_id) values ($1);
-	return $1;
-end
-$$ language plpgsql;
+BEGIN
+  -- Add new values to dictionaries
+  INSERT INTO mdl_dictionaries (att_id, value)
+       SELECT a.global_id, i.value
+         FROM in_data i, attribute_clusters a
+        WHERE i.source_id = a.local_source_id
+          AND i.name = a.local_name;
+END
+$$ LANGUAGE plpgsql;
 
 
-create or replace function mdl_load_test () returns void as
+CREATE OR REPLACE FUNCTION mdl_load_input () RETURNS void AS
 $$
-begin
-  drop index if exists mdl.idx_input_value;
-
-  delete from mdl.input;
-
-  insert into mdl.input (source_id, name, value)
-  select source_id, name, value
-    from doit_data
-   where source_id
-      in (select source_id from mdl.sources)
-     and value is not null;
-
-  create index idx_input_value on mdl.input using hash (value);
-end
-$$ language plpgsql;
+BEGIN
+  NULL;
+END
+$$ LANGUAGE plpgsql;
 
 
-create or replace function mdl_load_results () returns void as
+CREATE OR REPLACE FUNCTION mdl_load_results () RETURNS void AS
 $$
-begin
-  delete from mdl.results;
+BEGIN
+  CREATE INDEX idx_mdl_input_value ON in_data USING hash (value);
 
-  insert into mdl.results (source_id, name, match, description_length)
-  select source_id, name, tag_code, term1+term2+term3 dl
-    from mdl.description_length;
+  INSERT INTO nr_raw_results (source_id, name, method_name, match, score)
+  SELECT source_id, name, 'mdl', att_id, term1+term2+term3
+    FROM mdl_description_length;
 
-end
-$$ language plpgsql;
+  DROP INDEX IF EXISTS idx_mdl_input_value;
+END
+$$ LANGUAGE plpgsql;
