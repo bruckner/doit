@@ -1,0 +1,21 @@
+#!/bin/bash
+# Load the doit system into the goby database.
+# Must be run by a db user with admin priviledges.
+
+DBNAME=$1
+
+
+psql $DBNAME -f core.sql
+psql $DBNAME -f util.sql
+psql $DBNAME -f qgrams.sql
+psql $DBNAME -f tokenize.sql
+
+psql $DBNAME -f nameres/training.sql
+psql $DBNAME -f nameres/name_resolve.sql
+psql $DBNAME -f nameres/syn_test.sql
+psql $DBNAME -f nameres/val_test.sql
+psql $DBNAME -f nameres/mdl.sql
+psql $DBNAME -f nameres/ngrams.sql
+psql $DBNAME -f nameres/dist.sql
+
+exit
