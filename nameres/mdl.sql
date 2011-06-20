@@ -25,6 +25,17 @@ CREATE TABLE mdl_dictionaries (
 );
 CREATE INDEX idx_mdl_dictionaries_value ON mdl_dictionaries USING hash (value);
 
+-- Merge function for mdl_dictionaries: $1 - att_id; $2 - value
+CREATE OR REPLACE FUNCTION merge_mdl_dictionaries (integer, text) RETURNS void AS
+$$
+BEGIN
+  IF EXISTS (SELECT 1 FROM mdl_dictionaries WHERE att_id = $1 AND value = $2) THEN
+    RETURN;
+  END IF;
+  INSERT INTO mdl_dictionaries (att_id, value) VALUES ($1, $2);
+END
+$$ LANGUAGE plpgsql;
+
 
 
 -- Tables/views for computing description length
@@ -46,26 +57,29 @@ CREATE VIEW mdl_input_dict_stats AS
        FROM in_data
    GROUP BY source_id, name;
 
-CREATE VIEW mdl_input_match_counts_by_len AS
-     SELECT i.source_id, i.name, d.att_id, length(i.value) l, COUNT(*) card
+CREATE VIEW mdl_matches AS
+     SELECT i.source_id, i.name, d.att_id, i.value
        FROM in_data i, mdl_dictionaries d
-      WHERE i.value = d.value
-   GROUP BY i.source_id, i.name, d.att_id, l;
+      WHERE i.value = d.value;
+
+CREATE VIEW mdl_match_counts_by_len AS
+     SELECT source_id, name, att_id, length(value) l, COUNT(*) card
+       FROM mdl_matches
+   GROUP BY source_id, name, att_id, l;
 
 CREATE VIEW mdl_input_match_fracs AS
      SELECT m.source_id, m.name, m.att_id, (SUM(m.card)::float / s.n::float) f
-       FROM mdl_input_match_counts_by_len m, mdl_input_dict_stats s
+       FROM mdl_match_counts_by_len m, mdl_input_dict_stats s
       WHERE m.source_id = s.source_id
         AND m.name = s.name
    GROUP BY m.source_id, m.name, m.att_id, s.n;
 
 CREATE VIEW mdl_description_length AS
      SELECT i.source_id, i.name, i.att_id,
-   	    (f.f * ln(s.maxlen)) term1, (1.0 - f.f) * s.avglen * ln(128) term2,
+   	    (f.f * ln(s.maxlen)) term1,
+	    (1.0 - f.f) * s.avglen * ln(128) term2,
 	    (f.f / s.n::float) * SUM(ln(i.card * l.card)) term3
-       	    /*(ln(128)*s.avglen) term1, (f.f * ln(s.maxlen)) term2,
-	    (f.f / s.n::float) * sum(ln(l.card) - l.l * ln(128)) term3*/
-       FROM mdl_input_match_counts_by_len i, mdl_input_dict_stats s,
+       FROM mdl_match_counts_by_len i, mdl_input_dict_stats s,
 	    mdl_input_match_fracs f, mdl_dict_card_by_len l
       WHERE i.source_id = s.source_id
 	AND i.name = s.name
@@ -84,11 +98,32 @@ CREATE OR REPLACE FUNCTION mdl_load_dictionaries () RETURNS void AS
 $$
 BEGIN
   -- Add new values to dictionaries
-  INSERT INTO mdl_dictionaries (att_id, value)
+
+  CREATE TEMP TABLE  mdl_dict_tmp AS
        SELECT a.global_id, i.value
          FROM in_data i, attribute_clusters a
         WHERE i.source_id = a.local_source_id
-          AND i.name = a.local_name;
+          AND i.name = a.local_name
+     GROUP BY a.global_id, i.value;
+
+  CREATE INDEX idx_mdl_dict_tmp ON mdl_dict_tmp USING hash (value);
+  CREATE INDEX idx_mdl_dict_tmp2 ON mdl_dict_tmp (global_id);
+
+  DELETE FROM mdl_dict_tmp t
+        USING mdl_dictionaries d
+        WHERE t.global_id = d.att_id
+          AND t.value = d.value;
+
+  INSERT INTO mdl_dictionaries (att_id, value)
+  SELECT global_id, value FROM mdl_dict_tmp;
+
+  DROP TABLE mdl_dict_tmp;
+  RETURN;
+
+ PERFORM merge_mdl_dictionaries(a.global_id, i.value)
+    FROM in_data i, attribute_clusters a
+   WHERE i.source_id = a.local_source_id
+     AND i.name = a.local_name;
 END
 $$ LANGUAGE plpgsql;
 
