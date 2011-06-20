@@ -92,3 +92,10 @@ create aggregate group_concat (text, text) (
        initcond = ''
 );
 
+-- Overload round function to handle floats
+CREATE OR REPLACE FUNCTION round(float, integer) RETURNS numeric AS
+$$
+BEGIN
+  RETURN round($1::numeric, $2);
+END
+$$ LANGUAGE plpgsql;
