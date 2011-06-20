@@ -103,13 +103,14 @@ DROP TABLE IF EXISTS integration_methods CASCADE;
 CREATE TABLE integration_methods (
 	id serial,
 	method_name text,
-	active boolean
+	active boolean,
+	weight float
 );
 
-INSERT INTO integration_methods (method_name, active)
-     VALUES ('att_qgrams', 't'),
-	    ('mdl', 't'),
-	    ('val_ngrams', 't'),
-	    ('val_qgrams', 'f'),
-	    ('dist', 't');
+INSERT INTO integration_methods (method_name, active, weight)
+     VALUES ('att_qgrams', 't', 1.0),
+	    ('mdl', 't', 2.0),
+	    ('val_ngrams', 't', 1.2),
+	    ('val_qgrams', 'f',1.5),
+	    ('dist', 't',1.2);
 
