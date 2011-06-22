@@ -60,8 +60,10 @@ CREATE VIEW nr_raw_nice_results AS
 CREATE VIEW nr_raw_error_rates AS
      SELECT method_name, COUNT(*) n,
             COUNT(CASE WHEN is_correct THEN 1 ELSE NULL END) n_correct,
-	    COUNT(CASE WHEN is_correct THEN NULL ELSE 1 END) n_wrong,
-	    COUNT(CASE WHEN is_correct THEN NULL ELSE 1 END)::float / COUNT(*)::float error_rate
+	    COUNT(CASE WHEN is_correct AND is_correct IS NOT NULL THEN NULL ELSE 1 END) n_wrong,
+	    COUNT(*) - COUNT(is_correct) n_null,
+	    COUNT(CASE WHEN is_correct AND is_correct IS NOT NULL THEN NULL ELSE 1 END)::float /
+	    COUNT(is_correct)::float error_rate
        FROM nr_raw_nice_results
    GROUP BY method_name;
 
@@ -94,8 +96,10 @@ CREATE VIEW nr_composite_nice_results AS
 CREATE VIEW nr_composite_error_rates AS
      SELECT COUNT(*) n,
             COUNT(CASE WHEN is_correct THEN 1 ELSE NULL END) n_correct,
-	    COUNT(CASE WHEN is_correct THEN NULL ELSE 1 END) n_wrong,
-	    COUNT(CASE WHEN is_correct THEN NULL ELSE 1 END)::float / COUNT(*)::float error_rate
+	    COUNT(CASE WHEN is_correct AND is_correct IS NOT NULL THEN NULL ELSE 1 END) n_wrong,
+	    COUNT(*) - COUNT(is_correct) n_null,
+	    COUNT(CASE WHEN is_correct AND is_correct IS NOT NULL THEN NULL ELSE 1 END)::float /
+	    COUNT(is_correct)::float error_rate
        FROM nr_composite_nice_results;
 
 
