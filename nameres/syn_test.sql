@@ -102,7 +102,7 @@ BEGIN
        SELECT g.global_id, i.gram, SUM(i.c)
          FROM in_att_qgrams i, attribute_clusters g
         WHERE i.source_id = g.local_source_id
---          AND i.name = g.local_name
+          AND i.name = g.local_name
      GROUP BY g.global_id, i.gram;
 
   -- Dedup global qgrams table
