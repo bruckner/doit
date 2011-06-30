@@ -50,7 +50,6 @@ ALTER TABLE val_ngrams ADD PRIMARY KEY (gram, att_id);
 CREATE OR REPLACE FUNCTION merge_val_ngrams (integer, text, bigint) RETURNS void AS
 $$
 BEGIN
---  LOOP
     UPDATE val_ngrams SET c = c + $3 WHERE att_id = $1 AND gram = $2;
     IF found THEN
        RETURN;
@@ -61,7 +60,6 @@ BEGIN
     EXCEPTION WHEN unique_violation THEN
       NULL;
     END;
---  END LOOP;
 END
 $$ LANGUAGE plpgsql;
 
@@ -73,9 +71,9 @@ CREATE TABLE val_ngrams_doc_lens (
 
 
 CREATE TABLE val_ngrams_idf (
- 	 gram text,
-	 df integer,
-	 idf float NULL
+       gram text,
+       df integer,
+       idf float NULL
 );
 ALTER TABLE val_ngrams_idf ADD PRIMARY KEY (gram);
 
@@ -83,7 +81,6 @@ ALTER TABLE val_ngrams_idf ADD PRIMARY KEY (gram);
 CREATE OR REPLACE FUNCTION merge_val_ngrams_idf (text, bigint, integer) RETURNS void AS
 $$
 BEGIN
-  LOOP
     UPDATE val_ngrams_idf SET df = df + $2, idf = sqrt(ln($3::float/(df+$2))) WHERE gram = $1;
     IF found THEN
        RETURN;
@@ -94,9 +91,42 @@ BEGIN
     EXCEPTION WHEN unique_violation THEN
       NULL;
     END;
-  END LOOP;
 END
 $$ LANGUAGE plpgsql;
+
+
+CREATE VIEW val_ngrams_min_idf AS
+     SELECT MIN(idf) idf
+       FROM val_ngrams_idf;
+
+CREATE VIEW val_ngrams_norms AS
+     SELECT a.att_id, sqrt(SUM((a.tf*b.idf)^2)) norm
+       FROM val_ngrams a, val_ngrams_idf b
+      WHERE a.gram = b.gram
+   GROUP BY a.att_id;
+
+-- tfidf for incoming values
+CREATE VIEW in_val_ngrams_query_lens AS
+     SELECT source_id, name, SUM(c) len
+       FROM in_val_ngrams
+   GROUP BY source_id, name;
+
+CREATE VIEW in_val_ngrams_tf AS
+     SELECT a.source_id, a.name, a.gram, (a.c::float / b.len) tf
+       FROM in_val_ngrams a, in_val_ngrams_query_lens b
+      WHERE a.source_id = b.source_id
+        AND a.name = b.name;
+
+CREATE VIEW in_val_ngrams_idf AS
+     SELECT b.gram, COALESCE(b.idf, c.idf) idf
+       FROM val_ngrams_idf b, val_ngrams_min_idf c;
+
+CREATE VIEW in_val_ngrams_norms AS
+     SELECT a.source_id, a.name, sqrt(SUM((a.tf*b.idf)^2)) norm
+       FROM in_val_ngrams_tf a, in_val_ngrams_idf b
+      WHERE a.gram = b.gram
+   GROUP BY a.source_id, a.name;
+
 
 
 -- Cache incoming value-ngrams in in_val_ngrams table
@@ -156,11 +186,17 @@ CREATE OR REPLACE FUNCTION val_ngrams_results () RETURNS void AS
 $$
 BEGIN
   INSERT INTO nr_raw_results (source_id, name, method_name, match, score)
-       SELECT i.source_id, i.name, 'val_ngrams', tf.att_id, SUM(tf.tf*idf.idf)
-         FROM in_val_ngrams i, val_ngrams tf, val_ngrams_idf idf
-        WHERE i.gram = tf.gram
-          AND tf.gram = idf.gram
-     GROUP BY i.source_id, i.name, tf.att_id;
+       SELECT qtf.source_id, qtf.name, 'val_ngrams', dtf.att_id,
+       	      SUM(qtf.tf*qidf.idf * dtf.tf*didf.idf)::float / (qn.norm * dn.norm) score
+         FROM in_val_ngrams_tf qtf, in_val_ngrams_idf qidf, in_val_ngrams_norms qn,
+	      val_ngrams dtf, val_ngrams_idf didf, val_ngrams_norms dn
+        WHERE dtf.gram = qtf.gram
+          AND dtf.gram = qidf.gram
+	  AND dtf.gram = didf.gram
+	  AND qtf.source_id = qn.source_id
+	  AND qtf.name = qn.name
+	  AND dtf.att_id = dn.att_id
+     GROUP BY qtf.source_id, qtf.name, dtf.att_id, qn.norm, dn.norm;
 END
 $$ LANGUAGE plpgsql;
 
