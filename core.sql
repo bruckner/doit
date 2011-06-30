@@ -25,24 +25,33 @@ CREATE OR REPLACE FUNCTION staging_load (integer, integer DEFAULT 10000000) RETU
 $$
 BEGIN
 
-  INSERT INTO in_sources (source_id)
-       SELECT * FROM random_source_list($1,$2);
+  PERFORM staging_load_source(random_source_list)
+    FROM random_source_list($1, $2);
+
+END
+$$ LANGUAGE 'plpgsql';
+
+
+CREATE OR REPLACE FUNCTION staging_load_source (integer) RETURNS void AS
+$$
+BEGIN
+
+  INSERT INTO in_sources (source_id) VALUES ($1);
 
   INSERT INTO in_fields (source_id, name)
        SELECT source_id, name
          FROM public.doit_fields
-        WHERE source_id
-           IN (SELECT source_id FROM in_sources);
+        WHERE source_id = $1;
 
   INSERT INTO in_data (source_id, entity_id, name, value)
        SELECT source_id, local_entity_id, name, value
          FROM public.doit_data
-        WHERE source_id
-           IN (SELECT source_id FROM in_sources)
+        WHERE source_id = $1
 	  AND value IS NOT NULL;
 
 END
 $$ LANGUAGE 'plpgsql';
+
 
 -- UDF to clear out the staging area
 CREATE OR REPLACE FUNCTION staging_flush () RETURNS void AS
@@ -74,6 +83,8 @@ BEGIN
   PERFORM mdl_clean();
   PERFORM val_qgrams_flush();
   PERFORM val_ngrams_flush();
+
+  PERFORM nr_clean();
 END
 $$ LANGUAGE plpgsql;
 
