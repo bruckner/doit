@@ -18,7 +18,7 @@ SELECT source_id, name, tag_code
     IN (SELECT source_id FROM training_sources);
 
 CREATE VIEW training_data AS
-     SELECT source_id, local_entity_id, name, value
+     SELECT source_id, entity_id, name, value
        FROM public.doit_data
       WHERE source_id
          IN (SELECT source_id FROM training_sources)

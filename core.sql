@@ -44,7 +44,7 @@ BEGIN
         WHERE source_id = $1;
 
   INSERT INTO in_data (source_id, entity_id, name, value)
-       SELECT source_id, local_entity_id, name, value
+       SELECT source_id, entity_id, name, value
          FROM public.doit_data
         WHERE source_id = $1
 	  AND value IS NOT NULL;
