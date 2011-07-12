@@ -1,8 +1,8 @@
 
 -- Housekeeping
 DROP TABLE IF EXISTS val_dists CASCADE;
-DROP VIEW IF EXISTS in_val_dist_sums;
-DROP VIEW IF EXISTS in_val_dists;
+DROP VIEW IF EXISTS in_val_dist_sums CASCADE;
+DROP VIEW IF EXISTS in_val_dists CASCADE;
 
 CREATE OR REPLACE FUNCTION dist_flush () RETURNS void AS
 $$
@@ -60,12 +60,28 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION dist_results () RETURNS void AS
 $$
 BEGIN
-  INSERT INTO nr_raw_results (source_id, name, method_name, match, score)
+  CREATE TEMP TABLE dist_tmp AS
        SELECT *
-         FROM (SELECT a.source_id, a.name, 'dist', b.att_id, 
+         FROM (SELECT a.source_id, a.name, b.att_id, 
                       dist_t_test(a.n, b.n, a.mean, b.mean, a.variance, b.variance) p
                  FROM in_val_dists a, val_dists b) t
         WHERE p < 1.0;
+
+  CREATE TEMP TABLE dist_max_tmp AS
+       SELECT source_id, name, att_id, MIN(p) p
+         FROM dist_tmp
+     GROUP BY source_id, name, att_id;
+
+  INSERT INTO nr_raw_results (source_id, name, method_name, match, score)
+       SELECT a.source_id, a.name, 'dist', a.att_id, a.p
+         FROM dist_tmp a, dist_max_tmp b
+	WHERE a.source_id = b.source_id
+	  AND a.name = b.name
+	  AND a.att_id = b.att_id
+	  AND a.p = b.p;
+
+  DROP TABLE dist_tmp;
+  DROP TABLE dist_max_tmp;
 END
 $$ LANGUAGE plpgsql;
 
