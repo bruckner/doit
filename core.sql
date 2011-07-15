@@ -120,8 +120,8 @@ CREATE TABLE integration_methods (
 
 INSERT INTO integration_methods (method_name, active, weight)
      VALUES ('att_qgrams', 't', 1.0),
-	    ('mdl', 't', 2.0),
-	    ('val_ngrams', 't', 1.2),
-	    ('val_qgrams', 'f',1.5),
-	    ('dist', 't',1.2);
+	    ('mdl', 't', 1.0),
+	    ('val_ngrams', 't', 1.0),
+	    ('val_qgrams', 'f',1.0),
+	    ('dist', 't',1.0);
 
