@@ -40,25 +40,22 @@ CREATE TABLE val_qgrams (
      c integer,
      tf float NULL
 );
-CREATE INDEX idx_val_qgrams_gram ON val_qgrams (gram);
-CREATE INDEX idx_val_qgrams_att_id ON val_qgrams (att_id);
+ALTER TABLE val_qgrams ADD PRIMARY KEY (gram, att_id);
 
 -- Merge function for val_qgrams: $1 - att_id; $2 - gram; $3 - c
 CREATE OR REPLACE FUNCTION merge_val_qgrams (integer, text, bigint) RETURNS void AS
 $$
 BEGIN
-  LOOP
-    UPDATE val_qgrams SET c = c + $3, tf = ln(1+c+$3) WHERE att_id = $1 AND gram = $2;
+    UPDATE val_qgrams SET c = c + $3 WHERE att_id = $1 AND gram = $2;
     IF found THEN
        RETURN;
     END IF;
     BEGIN
-      INSERT INTO val_qgrams (att_id,gram,c,tf) VALUES ($1,$2,$3,ln(1+$3));
+      INSERT INTO val_qgrams (att_id,gram,c) VALUES ($1,$2,$3);
       RETURN;
     EXCEPTION WHEN unique_violation THEN
       NULL;
     END;
-  END LOOP;
 END
 $$ LANGUAGE plpgsql;
 
@@ -94,7 +91,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION val_qgrams_stage () RETURNS void AS
 $$
 BEGIN
-  DELETE FROM in_val_qgrams;
+  TRUNCATE in_val_qgrams;
 
   INSERT INTO in_val_qgrams (source_id, name, gram, c)
        SELECT source_id, name, gram, COUNT(*)
@@ -123,6 +120,10 @@ BEGIN
     WHERE i.source_id = g.local_source_id
       AND i.name = g.local_name
  GROUP BY i.gram;
+
+  -- Recompute tf scores
+  UPDATE val_qgrams a
+     SET tf = ln(1+a.c);
 
   -- Still need to recompute idf values if att_count has changed...
 
