@@ -27,7 +27,7 @@ select source_id
   from (
     select source_id, random() x
       from public.doit_sources
-     where n_entities <= $2
+     where n_values <= $2
   order by x desc
      limit $1
   ) t;
