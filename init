@@ -3,19 +3,24 @@
 # Must be run by a db user with admin priviledges.
 
 DBNAME=$1
+OUTFILE=init.out
 
+psql $DBNAME -f core.sql &> $OUTFILE
+psql $DBNAME -f util.sql >> $OUTFILE 2>&1
+psql $DBNAME -f qgrams.sql >> $OUTFILE 2>&1
+psql $DBNAME -f tokenize.sql >> $OUTFILE 2>&1
 
-psql $DBNAME -f core.sql
-psql $DBNAME -f util.sql
-psql $DBNAME -f qgrams.sql
-psql $DBNAME -f tokenize.sql
+psql $DBNAME -f nameres/training.sql >> $OUTFILE 2>&1
+psql $DBNAME -f nameres/name_resolve.sql >> $OUTFILE 2>&1
+psql $DBNAME -f nameres/syn_test.sql >> $OUTFILE 2>&1
+psql $DBNAME -f nameres/val_test.sql >> $OUTFILE 2>&1
+psql $DBNAME -f nameres/mdl.sql >> $OUTFILE 2>&1
+psql $DBNAME -f nameres/ngrams.sql >> $OUTFILE 2>&1
+psql $DBNAME -f nameres/dist.sql >> $OUTFILE 2>&1
 
-psql $DBNAME -f nameres/training.sql
-psql $DBNAME -f nameres/name_resolve.sql
-psql $DBNAME -f nameres/syn_test.sql
-psql $DBNAME -f nameres/val_test.sql
-psql $DBNAME -f nameres/mdl.sql
-psql $DBNAME -f nameres/ngrams.sql
-psql $DBNAME -f nameres/dist.sql
+psql $DBNAME -f factor/substrs.sql >> $OUTFILE 2>&1
+psql $DBNAME -f factor/factor.sql >> $OUTFILE 2>&1
+
+cat $OUTFILE | grep 'ERROR'
 
 exit
