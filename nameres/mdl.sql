@@ -74,10 +74,15 @@ CREATE VIEW mdl_input_match_fracs AS
         AND m.name = s.name
    GROUP BY m.source_id, m.name, m.att_id, s.n;
 
+-- Unencoded (generic string) description length
+CREATE VIEW mdl_base_dl AS
+     SELECT source_id, name, 'STRING'::text domain_name, (1.0 * avglen * ln(255)) dl
+       FROM mdl_input_dict_stats;
+
 CREATE VIEW mdl_description_length AS
      SELECT i.source_id, i.name, i.att_id,
    	    (f.f * ln(s.maxlen)) term1,
-	    (1.0 - f.f) * s.avglen * ln(128) term2,
+	    (1.0 - f.f) * s.avglen * ln(255) term2,
 	    (f.f / s.n::float) * SUM(ln(i.card * l.card)) term3
        FROM mdl_match_counts_by_len i, mdl_input_dict_stats s,
 	    mdl_input_match_fracs f, mdl_dict_card_by_len l
@@ -142,8 +147,10 @@ BEGIN
   CREATE INDEX idx_mdl_input_value ON in_data USING hash (value);
 
   INSERT INTO nr_raw_results (source_id, name, method_name, match, score)
-  SELECT source_id, name, 'mdl', att_id, term1+term2+term3
-    FROM mdl_description_length;
+  SELECT a.source_id, a.name, 'mdl', a.att_id, GREATEST(0, 1.0 - (a.term1+a.term2+a.term3) / b.dl)
+    FROM mdl_description_length a, mdl_base_dl b
+   WHERE a.source_id = b.source_id
+     AND a.name = b.name;
 
   DROP INDEX IF EXISTS idx_mdl_input_value;
 END

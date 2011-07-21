@@ -30,63 +30,14 @@ CREATE VIEW nr_field_count AS
        FROM public.doit_fields
       WHERE source_id IN (SELECT source_id FROM nr_raw_results);
 
--- desc: Make such MAX(score) is tops
-CREATE VIEW nr_desc_mdl_results AS
-     SELECT source_id, name, match, (1.0 / (score + 1.0)) score
-       FROM nr_raw_results
-      WHERE method_name = 'mdl';
-
-CREATE VIEW nr_desc_dist_results AS
-     SELECT source_id, name, match, (1 - score) score
-       FROM nr_raw_results
-      WHERE method_name = 'dist';
-
-CREATE VIEW nr_desc_results AS
-     SELECT *
-       FROM nr_raw_results
-      WHERE method_name != 'mdl'
-        AND method_name != 'dist'
-      UNION
-     SELECT source_id, name, 'mdl' method_name, match, score
-       FROM nr_desc_mdl_results
-      UNION
-     SELECT source_id, name, 'dist' method_name, match, score
-       FROM nr_desc_dist_results;
-
 CREATE VIEW nr_raw_max_scores AS
      SELECT source_id, name, method_name, MAX(score) score
-       FROM nr_desc_results
+       FROM nr_raw_results
    GROUP BY source_id, name, method_name;
 
 CREATE VIEW nr_raw_max_results AS
      SELECT r.*
-       FROM nr_desc_results r, nr_raw_max_scores m
-      WHERE r.score = m.score
-        AND r.name = m.name
-	AND r.source_id = m.source_id
-	AND r.method_name = m.method_name;
-
--- norm: Scores all in [0,1] -- only MDL needs to be norm'd
-CREATE VIEW nr_norm_results AS
-     SELECT *
-       FROM nr_desc_results
-      WHERE method_name != 'mdl'
-      UNION
-     SELECT r.source_id, r.name, 'mdl', r.match, r.score::float / m.score
-       FROM nr_desc_results r, nr_raw_max_results m
-      WHERE r.method_name = 'mdl'
-        AND m.method_name = 'mdl'
-        AND r.source_id = m.source_id
-	AND r.name = m.name;
-
-CREATE VIEW nr_norm_max_scores AS
-     SELECT source_id, name, method_name, MAX(score) score
-       FROM nr_norm_results
-    GROUP BY source_id, name, method_name;
-
-CREATE VIEW nr_norm_max_results AS
-     SELECT r.*
-       FROM nr_norm_results r, nr_norm_max_scores m
+       FROM nr_raw_results r, nr_raw_max_scores m
       WHERE r.score = m.score
         AND r.name = m.name
 	AND r.source_id = m.source_id
@@ -95,7 +46,7 @@ CREATE VIEW nr_norm_max_results AS
 CREATE VIEW nr_raw_nice_results AS
      SELECT r.source_id, r.name, r.method_name, g.name AS match, r.score,
             (g.name = NULLIF(f.tag_code,'NO_DISPLAY'))::boolean is_correct, f.tag_code correct 
-       FROM nr_norm_max_results r, global_attributes g, public.doit_fields f
+       FROM nr_raw_max_results r, global_attributes g, public.doit_fields f
       WHERE r.match = g.id
         AND r.name = f.name
 	AND r.source_id = f.source_id;
@@ -128,7 +79,7 @@ CREATE VIEW nr_raw_error_rates AS
 -- normalized scores times the method weight.
 CREATE VIEW nr_ncomp_results AS
      SELECT r.source_id, r.name, r.match, SUM((r.score * m.weight)^2) score
-       FROM nr_norm_results r, integration_methods m
+       FROM nr_raw_results r, integration_methods m
       WHERE r.method_name = m.method_name
    GROUP BY r.source_id, r.name, r.match;
 
