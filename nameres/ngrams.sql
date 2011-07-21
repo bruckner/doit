@@ -72,11 +72,12 @@ CREATE TABLE val_ngrams_doc_lens (
 
 CREATE TABLE val_ngrams_idf (
        gram text,
-       df integer,
+--       df integer,
        idf float NULL
 );
 ALTER TABLE val_ngrams_idf ADD PRIMARY KEY (gram);
 
+/*
 -- Merge function for val_ngrams_idf: $1 - gram; $2 - df; $3 - #docs
 CREATE OR REPLACE FUNCTION merge_val_ngrams_idf (text, bigint, integer) RETURNS void AS
 $$
@@ -93,7 +94,7 @@ BEGIN
     END;
 END
 $$ LANGUAGE plpgsql;
-
+*/
 
 CREATE VIEW val_ngrams_min_idf AS
      SELECT MIN(idf) idf
@@ -147,7 +148,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION val_ngrams_load () RETURNS void AS
 $$
 DECLARE
-	att_count integer := COUNT(*) FROM attribute_clusters;
+	att_count float;
 BEGIN
 
   -- Merge incoming ngrams into val_ngrams table
@@ -163,12 +164,14 @@ BEGIN
          FROM val_ngrams
      GROUP BY att_id;
 
+/*
   -- Merge incoming grams into val_ngrams_idf table
-  PERFORM merge_val_ngrams_idf(i.gram, COUNT(*), att_count)
+  PERFORM merge_val_ngrams_idf(i.gram, COUNT(*))
      FROM in_val_ngrams i, attribute_clusters g
     WHERE i.source_id = g.local_source_id
       AND i.name = g.local_name
  GROUP BY i.gram;
+*/
 
   -- Recompute tf scores (slow?!)
   UPDATE val_ngrams a
@@ -176,7 +179,15 @@ BEGIN
     FROM val_ngrams_doc_lens b
    WHERE a.att_id = b.att_id;
 
-   -- Still need to recompute idf scores if att_count has changed...
+   -- Recompute idf scores
+   att_count := COUNT(*)::float FROM global_attributes;
+
+   DELETE FROM val_ngrams_idf;
+
+   INSERT INTO val_ngrams_idf (gram, idf)
+        SELECT gram, sqrt(ln( att_count / COUNT(*) ))
+	  FROM val_ngrams
+      GROUP BY gram;
 
 END
 $$ LANGUAGE plpgsql;
