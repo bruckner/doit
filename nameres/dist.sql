@@ -73,7 +73,7 @@ BEGIN
      GROUP BY source_id, name, att_id;
 
   INSERT INTO nr_raw_results (source_id, name, method_name, match, score)
-       SELECT a.source_id, a.name, 'dist', a.att_id, a.p
+       SELECT a.source_id, a.name, 'dist', a.att_id, 1.0 - a.p
          FROM dist_tmp a, dist_max_tmp b
 	WHERE a.source_id = b.source_id
 	  AND a.name = b.name
