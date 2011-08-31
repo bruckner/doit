@@ -1,0 +1,19 @@
+{% extends "doit/base.html" %}
+
+{% block title %}Data Source Index{% endblock %}
+
+{% block content %}
+    <div style="margin:0 auto;width:800px;">
+      <a href="./lowscorers/">Lowest scoring attributes</a>
+      {% if source_list %}
+      <h3>Available Sources:</h3>
+      <ul>
+      {% for s in source_list %}
+        <li><a href="./{{ s }}/">{{ s }}</a></li>
+      {% endfor %}
+      </ul>
+      {% else %}
+        <p>No sources are available!</p>
+      {% endif %}
+    </div>
+{% endblock content %}

@@ -1,0 +1,15 @@
+{% extends "doit/pop_values.html" %}
+
+{% block subnav-egs %}<span class="link-here">Example Values</span>{% endblock subnav-egs %}
+
+{% block info %}
+      <table class="spreadsheetish">
+        {% for row in examples %}
+   	  <tr{% if forloop.first %} class="header"{% endif %}>
+	    {% for item in row|slice:":5" %}
+	      <td{% if forloop.first %} class="highlight"{% endif %}>{{ item|truncatewords:10 }}</td>
+	    {% endfor %}
+	  </tr>
+        {% endfor %}
+      </table>
+{% endblock info %}

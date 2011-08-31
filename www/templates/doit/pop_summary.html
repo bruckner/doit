@@ -1,0 +1,22 @@
+{% extends "doit/pop.html" %}
+
+{% block navlink-summary %}<span class="link-here">Summary</span>{% endblock navlink-summary %}
+
+{% block content %}
+<div style="margin:1em;">
+  <h4>'{{ attr_name }}' in Source {{ source }}</h4>
+
+  {% if histo %}
+  <div id="summary-histo" style="float:right;" class="histo-medium"></div>
+  <script type="text/javascript">
+    add_histo("#summary-histo", {{ histo.buckets }}, {{ histo.min|floatformat:2 }}, {{ histo.max|floatformat:2 }});
+  </script>
+  {% else %}
+  {% endif %}
+
+  <div>About {{ attr_name }}:</div>
+
+  <div>About source {{ source }}:</div>
+
+</div>
+{% endblock content %}

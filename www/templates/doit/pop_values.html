@@ -1,0 +1,17 @@
+{% extends "doit/pop.html" %}
+
+{% block navlink-values %}<span class="link-here">Values</span>{% endblock navlink-values %}
+
+{% block content %}
+<div>
+
+  <div style="margin:1em;">
+    {% block subnav-egs %}<a href="./!{{ attr_name|urlencode }}/values/examples" onclick="fill_popover(this.href, 800); return false;">Example Values</a>{% endblock subnav-egs %} |
+    {% block subnav-shared %}<a href="./!{{ attr_name|urlencode }}/values/shared" onclick="fill_popover(this.href, 800); return false;">Shared Values</a>{% endblock subnav-shared %} |
+    {% block subnav-distro %}<a href="./!{{ attr_name|urlencode }}/values/distro" onclick="fill_popover(this.href, 800); return false;">Distributions</a>{% endblock subnav-distro %}
+  </div>
+
+  {% block info %}{% endblock info %}
+
+</div>
+{% endblock content %}

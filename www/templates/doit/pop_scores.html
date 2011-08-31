@@ -1,0 +1,50 @@
+{% extends "doit/pop.html" %}
+
+{% block navlink-scores %}<span class="link-here">Scores</span>{% endblock navlink-scores %}
+
+{% block content %}
+<div>
+  <div style="margin:1em;">
+    Scoring breakdown for best matches to <span style="font-weight:bold;font-size:12pt;">{{ attr_name }}</span>
+  </div>
+  <table class="spreadsheetish">
+    <tr>
+      <td></td>
+      {% for match in matches|slice:":4" %}
+      <td class="header">{{ match.name }}</td>
+      {% endfor %}
+    </tr>
+    <tr>
+      <td class="header">Synonyms</td>
+      {% for match in matches|slice:":4" %}
+      <td>{{ match.att_qgrams|default:0|floatformat:3 }}</td>
+      {% endfor %}
+    </tr>
+    <tr>
+      <td class="header">N-grams</td>
+      {% for match in matches|slice:":4" %}
+      <td>{{ match.val_ngrams|default:"0"|floatformat:3 }}</td>
+      {% endfor %}
+    </tr>
+    <tr>
+      <td class="header">MDL</td>
+      {% for match in matches|slice:":4" %}
+      <td>{{ match.mdl|default:"0"|floatformat:3 }}</td>
+      {% endfor %}
+    </tr>
+    <tr>
+      <td class="header">T-test</td>
+      {% for match in matches|slice:":4" %}
+      <td>{{ match.dist|default:"0"|floatformat:3 }}</td>
+      {% endfor %}
+    </tr>
+    <tr>
+      <td class="header">Composite</td>
+      {% for match in matches|slice:":4" %}
+      <td>{{ match.cscore|default:"0"|floatformat:3 }}</td>
+      {% endfor %}
+    </tr>
+  </table>
+</div>
+
+{% endblock content %}

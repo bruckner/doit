@@ -1,0 +1,77 @@
+{% extends "doit/base.html" %}
+
+{% block title %}Attribute Mapper{% endblock title %}
+
+{% block content %}
+  <div>
+    <h2>Map Attributes for Source {{ source_id }}</h2>
+    <div style="border:1px solid #EDEDED;border-radius:8px;">
+      <p>About source {{ source_id }}</p>
+      <table>
+	<tr><td style="padding-right:1em;text-align:right;font-weight:bold;">Name:</td><td>Example Name</td>
+	<tr><td style="padding-right:1em;text-align:right;font-weight:bold;">Description:</td><td>An interesting bit of data</td>
+	<tr><td style="padding-right:1em;text-align:right;font-weight:bold;">Operator:</td><td>Dr. Frankenstein</td>
+      </table>
+  </div>
+  {% if attr_list %}
+  <div class="mapper">
+    <table>
+      <tr>
+	<th class="attr header">Attribute</th>
+	<th class="match header">Best match</th>
+	<th class="actions header" colspan=3>Actions</th>
+	<th class="status header">Status</th>
+      </tr>
+    </table>
+    {% for attr in attr_list %}
+    <div>
+      <table>
+	<tr>
+	  <td class="attr" title='e.g. "{{ attr.example|striptags|truncatewords:6 }}"'>{{ attr.name }}</td>
+	  <td class="match">
+	      <div class="button">V</div>
+	      <ul>
+		{% for cand in attr.candidates|slice:":5" %}
+		<li id="{{ attr.name }}-to-{{ cand.1 }}" title="{{ cand.0 }} Score: {{ cand.2|floatformat }} out of 4.0" style="border-left-color:#{{ cand.4 }}{{ cand.3 }}44;">
+		  {{ cand.0 }}
+		</li>
+		{% endfor %}
+		<li>More...</li>
+	      </ul>
+	  </td>
+	  <td class="actions">
+	    <span class="button accept">Yes</span>
+	    <span class="button reject">No</span>
+	    <span class="button reset">Reset</span>
+	    <span class="button detail">Details...</span>
+	  </td>
+	  <td class="status">unmapped</td>
+	</tr>
+      </table>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div>Nothing to do!</div>
+  {% endif %}
+
+  {% block floatingcontrols %}
+  <form class="floatcontrol" action="" method="POST">
+    <div>
+      {% csrf_token %}
+      <input type="submit" value="Reset" />
+      <input type="text" value="Find..." style="margin-left:4em;padding:0 0.5em;width:250px;color:#B0B0B0" />
+      <input type="submit" value="Go" />
+      <input type="submit" value="Save" style="float:right;" />
+    </div>
+  </form>
+  {% endblock floatingcontrols %}
+
+
+{% endblock content %}
+
+{% block jquery %}
+  <script type="text/javascript" src="/static/js/mapper.js"></script>
+{% endblock jquery %}
+
+

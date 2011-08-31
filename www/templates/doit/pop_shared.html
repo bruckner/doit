@@ -1,0 +1,15 @@
+{% extends "doit/pop_values.html" %}
+
+{% block subnav-shared %}<span class="link-here">Shared Values</span>{% endblock subnav-shared %}
+
+{% block info %}
+<table class="spreadsheetish">
+  {% for row in shared %}
+  <tr{% if forloop.first %} class="header"{% endif %}>
+    {% for item in row|slice:":5" %}
+    <td>{{ item }}</td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+{% endblock info %}

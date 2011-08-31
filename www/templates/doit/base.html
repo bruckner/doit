@@ -1,0 +1,24 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html>
+<head>
+  <title>{% block title %}DoIt!{% endblock title %}</title>
+  {% block styles %}
+  <link rel="stylesheet" type="text/css" href="/static/styles/base.css" />
+  <link rel="stylesheet" type="text/css" href="/static/styles/svg.css" />
+  {% endblock styles %}
+</head>
+
+<body>
+  <div id="content">
+    {% block content %}{% endblock content %}
+  </div>
+
+  <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.min.js"></script>
+  {% block jquery %}{% endblock jquery %}
+  <script type="text/javascript" src="https://raw.github.com/mbostock/d3/master/d3.js"></script>
+  <script type="text/javascript" src="/static/js/histo.js"></script>
+  {% block d3 %}{% endblock d3 %}
+
+</body>
+</html>

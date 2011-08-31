@@ -1,0 +1,13 @@
+{% block navlinks %}
+<div>
+  {% block navlink-summary %}<a href="./!{{ attr_name|urlencode }}/summary" onclick="fill_popover(this.href, 600); return false;">Summary</a>{% endblock navlink-summary %} |
+  {% block navlink-scores %}<a href="./!{{ attr_name|urlencode }}/scores" onclick="fill_popover(this.href, 800); return false;">Scoring Breakdown</a>{% endblock navlink-scores %} |
+  {% block navlink-values %}<a href="./!{{ attr_name|urlencode }}/values/examples" onclick="fill_popover(this.href, 800); return false;">Values</a>{% endblock navlink-values %} |
+  {% block navlink-history %}<a href="" onclick="return false;">History</a>{% endblock navlink-history %}
+</div>
+{% endblock navlinks %}
+
+{% block content %}
+{% endblock content %}
+
+<p>{{ debug }}</p>
