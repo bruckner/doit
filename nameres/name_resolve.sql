@@ -1,6 +1,5 @@
 -- Tables, views, and functions for name resolution
 
-
 -- Housekeeping
 DROP TABLE IF EXISTS nr_raw_results CASCADE;
 DROP TABLE IF EXISTS nr_ncomp_results_tbl CASCADE;
@@ -11,58 +10,49 @@ $$
 BEGIN
   DELETE FROM nr_raw_results;
   DELETE FROM nr_ncomp_results_tbl;
-  DELETE FROM nr_rwc_results;
 END
 $$ LANGUAGE plpgsql;
 
 
 -- Tables and views for results and output
 CREATE TABLE nr_raw_results (
-       source_id integer,
-       name text,
+       field_id integer,
        method_name text,
-       match integer,
+       match_id integer,
        score float
 );
 
-CREATE VIEW nr_field_count AS
-     SELECT COUNT(NULLIF(tag_code,'NO_DISPLAY')) c
-       FROM public.doit_fields
-      WHERE source_id IN (SELECT source_id FROM nr_raw_results);
-
+-- Determine top score for each field and method
 CREATE VIEW nr_raw_max_scores AS
-     SELECT source_id, name, method_name, MAX(score) score
+     SELECT field_id, method_name, MAX(score) score
        FROM nr_raw_results
-   GROUP BY source_id, name, method_name;
+   GROUP BY field_id, method_name;
 
+-- Filter raw results for only top scoring matches
 CREATE VIEW nr_raw_max_results AS
      SELECT r.*
        FROM nr_raw_results r, nr_raw_max_scores m
       WHERE r.score = m.score
-        AND r.name = m.name
-	AND r.source_id = m.source_id
+	AND r.field_id = m.field_id
 	AND r.method_name = m.method_name;
 
 CREATE VIEW nr_raw_nice_results AS
-     SELECT r.source_id, r.name, r.method_name, g.name AS match, r.score,
-            (g.name = NULLIF(f.tag_code,'NO_DISPLAY'))::boolean is_correct, f.tag_code correct 
-       FROM nr_raw_max_results r, global_attributes g, public.doit_fields f
-      WHERE r.match = g.id
-        AND r.name = f.name
-	AND r.source_id = f.source_id;
+     SELECT pdf.source_id, pdf.name, r.method_name, g.name AS match, r.score,
+            (g.name = NULLIF(pdf.tag_code, 'NO_DISPLAY'))::boolean is_correct, pdf.tag_code correct 
+       FROM nr_raw_max_results r
+ INNER JOIN global_attributes g ON r.match_id = g.id
+ INNER JOIN local_fields f ON r.field_id = f.id
+ INNER JOIN local_sources s ON s.id = f.source_id
+ INNER JOIN public.doit_fields pdf ON pdf.source_id = s.local_id::INTEGER AND pdf.name = f.local_name;
 
-CREATE VIEW nr_raw_ambig_count AS
-     SELECT method_name, SUM(n) c
-       FROM (
-       	    SELECT method_name, COUNT(*) n 
-	      FROM nr_raw_max_results
-	  GROUP BY source_id, name, method_name
-	    ) t
-      WHERE t.n > 1
-   GROUP BY method_name;
+CREATE VIEW nr_field_count AS
+     SELECT COUNT(NULLIF(tag_code, 'NO_DISPLAY')) AS "c"
+       FROM public.doit_fields
+      WHERE source_id IN (SELECT source_id FROM nr_raw_nice_results);
 
 CREATE VIEW nr_raw_error_counts AS
-     SELECT method_name, COUNT(*) n,
+     SELECT method_name,
+     	    COUNT(*) n,
             COUNT(CASE WHEN is_correct THEN 1 ELSE NULL END) n_correct,
 	    COUNT(CASE WHEN is_correct OR is_correct IS NULL THEN NULL ELSE 1 END) n_wrong,
 	    COUNT(*) - COUNT(is_correct) n_null
@@ -70,7 +60,10 @@ CREATE VIEW nr_raw_error_counts AS
    GROUP BY method_name;
 
 CREATE VIEW nr_raw_error_rates AS
-     SELECT *, n_correct::float / f.c success_rate, n_wrong::float / f.c error_rate, n_correct::float / n_wrong ratio
+     SELECT *,
+     	    n_correct::float / f.c AS "success_rate",
+	    n_wrong::float / f.c AS "error_rate",
+	    n_correct::float / n_wrong AS "ratio"
        FROM nr_raw_error_counts r
  INNER JOIN nr_field_count f
          ON 1 = 1;
@@ -78,43 +71,33 @@ CREATE VIEW nr_raw_error_rates AS
 -- ncomp: Naive composite scoring by summing over all raw results the
 -- normalized scores times the method weight.
 CREATE VIEW nr_ncomp_results AS
-     SELECT r.source_id, r.name, r.match, SUM((r.score * m.weight)^2) score
+     SELECT r.field_id, r.match_id, SUM((r.score * m.weight)^2) score
        FROM nr_raw_results r, integration_methods m
       WHERE r.method_name = m.method_name
-   GROUP BY r.source_id, r.name, r.match;
+        AND m.active = true
+   GROUP BY r.field_id, r.match_id;
 
 CREATE TABLE nr_ncomp_results_tbl (
-       source_id integer,
-       name text,
-       match integer,
+       field_id integer,
+       match_id integer,
        score float
 );
-CREATE INDEX idx_nr_ncomp_results_source_id ON nr_ncomp_results_tbl (source_id, name, score);
-
-CREATE VIEW nr_ncomp_max_scores AS
-     SELECT source_id, name, MAX(score) score
-       FROM nr_ncomp_results_tbl
-   GROUP BY source_id, name;
+CREATE INDEX idx_nr_ncomp_results_field_id ON nr_ncomp_results_tbl (field_id, score);
 
 CREATE VIEW nr_ncomp_max_results AS
      SELECT r.*
-       FROM nr_ncomp_results_tbl r, nr_ncomp_max_scores m
-      WHERE r.score = m.score
-        AND r.name = m.name
-	AND r.source_id = m.source_id;
+       FROM nr_ncomp_results_tbl r
+ INNER JOIN (SELECT field_id, MAX(score) score FROM nr_ncomp_results_tbl GROUP BY field_id) m
+         ON r.field_id = m.field_id AND r.score = m.score;
 
 CREATE VIEW nr_ncomp_nice_results AS
-     SELECT r.source_id, r.name, g.name AS match, r.score,
-            (g.name = NULLIF(f.tag_code,'NO_DISPLAY'))::boolean is_correct, f.tag_code correct 
-       FROM nr_ncomp_max_results r, global_attributes g, public.doit_fields f
-      WHERE r.match = g.id
-        AND r.name = f.name
-	AND r.source_id = f.source_id;
-
-CREATE VIEW nr_ncomp_ambig_count AS
-     SELECT SUM(n) c
-       FROM (SELECT COUNT(*) n FROM nr_ncomp_nice_results GROUP BY source_id, name) t
-      WHERE t.n > 1;
+     SELECT pdf.source_id, pdf.name, g.name AS match, r.score,
+            (g.name = NULLIF(pdf.tag_code, 'NO_DISPLAY'))::boolean is_correct, pdf.tag_code correct 
+       FROM nr_ncomp_max_results r
+ INNER JOIN global_attributes g ON r.match_id = g.id
+ INNER JOIN local_fields f ON r.field_id = f.id
+ INNER JOIN local_sources s ON s.id = f.source_id
+ INNER JOIN public.doit_fields pdf ON pdf.source_id = s.local_id::INTEGER AND pdf.name = f.local_name;
 
 CREATE VIEW nr_ncomp_error_rates AS
      SELECT f.c tot, COUNT(*) n,
@@ -133,35 +116,31 @@ CREATE VIEW nr_ncomp_error_rates AS
 -- from individual methods, assigning weights to each method, taking max
 -- composite scorers
 CREATE VIEW nr_mcomp_results AS
-     SELECT source_id, name, match, SUM(m.weight) score
+     SELECT field_id, match_id, SUM(m.weight) score
        FROM nr_raw_max_results r, integration_methods m
       WHERE r.method_name = m.method_name
-   GROUP BY source_id, name, match;
+   GROUP BY field_id, match_id;
 
 CREATE VIEW nr_mcomp_max_scores AS
-     SELECT source_id, name, MAX(score) score
+     SELECT field_id, MAX(score) score
        FROM nr_mcomp_results
-   GROUP BY source_id, name;
+   GROUP BY field_id;
 
 CREATE VIEW nr_mcomp_max_results AS
      SELECT r.*
        FROM nr_mcomp_results r, nr_mcomp_max_scores m
       WHERE r.score = m.score
-        AND r.name = m.name
-	AND r.source_id = m.source_id;
+        AND r.field_id = m.field_id;
 
 CREATE VIEW nr_mcomp_nice_results AS
-     SELECT r.source_id, r.name, g.name AS match, r.score,
-            (g.name = NULLIF(f.tag_code,'NO_DISPLAY'))::boolean is_correct, f.tag_code correct 
-       FROM nr_mcomp_max_results r, global_attributes g, public.doit_fields f
-      WHERE r.match = g.id
-        AND r.name = f.name
-	AND r.source_id = f.source_id;
+     SELECT pdf.source_id, pdf.name, g.name AS match, r.score,
+            (g.name = NULLIF(pdf.tag_code, 'NO_DISPLAY'))::boolean is_correct, pdf.tag_code correct 
+       FROM nr_mcomp_max_results r
+ INNER JOIN global_attributes g ON r.match_id = g.id
+ INNER JOIN local_fields f ON r.field_id = f.id
+ INNER JOIN local_sources s ON s.id = f.source_id
+ INNER JOIN public.doit_fields pdf ON pdf.source_id = s.local_id::INTEGER AND pdf.name = f.local_name;
 
-CREATE VIEW nr_mcomp_ambig_count AS
-     SELECT SUM(n) c
-       FROM (SELECT COUNT(*) n FROM nr_mcomp_nice_results GROUP BY source_id, name) t
-      WHERE t.n > 1;
 
 CREATE VIEW nr_mcomp_error_rates AS
      SELECT f.c tot, COUNT(*) n,
@@ -177,19 +156,21 @@ CREATE VIEW nr_mcomp_error_rates AS
 
 
 -- UDF to run all active processing methods
-CREATE OR REPLACE FUNCTION nr_compute_results () RETURNS void AS
+CREATE OR REPLACE FUNCTION nr_test_source (integer) RETURNS void AS
 $$
+DECLARE
+  test_source_id int = $1;
 BEGIN
 
   IF EXISTS (SELECT 1 FROM integration_methods WHERE method_name = 'att_qgrams' AND active = 't') THEN
     RAISE INFO 'Performing attribute synonym matching with qgrams...';
-    PERFORM syn_load_results();
+    PERFORM att_qgrams_test_source(test_source_id);
     RAISE INFO '  done.';
   END IF;
 
   IF EXISTS (SELECT 1 FROM integration_methods WHERE method_name = 'mdl' AND active = 't') THEN
     RAISE INFO 'Performing MDL dictionary matching...';
-    PERFORM mdl_load_results();
+    PERFORM mdl_test_source(test_source_id);
     RAISE INFO '  done.';
   END IF;
 
@@ -209,7 +190,7 @@ BEGIN
 
   IF EXISTS (SELECT 1 FROM integration_methods WHERE method_name = 'dist' AND active = 't') THEN
     RAISE INFO 'Performing value-set distribution t-test matching...';
-    PERFORM dist_results();
+    PERFORM dist_test_source();
     RAISE INFO '  done.';
   END IF;
 
@@ -221,20 +202,43 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION nr_composite_load() RETURNS void AS
 $$
 BEGIN
-  INSERT INTO nr_ncomp_results_tbl (source_id, name, match, score)
-       SELECT * FROM nr_ncomp_results;
+  INSERT INTO nr_ncomp_results_tbl
+       SELECT *
+       	 FROM nr_ncomp_results;
 END
 $$ LANGUAGE plpgsql;
 
 
-CREATE OR REPLACE FUNCTION nr_test (integer, integer) RETURNS void AS
+CREATE OR REPLACE FUNCTION nr_test (INTEGER, INTEGER) RETURNS VOID AS
 $$
 BEGIN
-  PERFORM staging_load($1, $2);
-  PERFORM nr_compute_results();
+  RAISE INFO 'nr_test: Importing test data...';
+  CREATE TEMP TABLE test_sources_tmp AS
+  SELECT import_random AS "source_id" FROM import_random($1, $2);
+
+  RAISE INFO 'done.  Computing results...';
+  PERFORM nr_results_for_source(source_id) FROM test_sources_tmp;
+
+  RAISE INFO 'done.';
+  DROP TABLE test_sources_tmp;
 END
 $$ LANGUAGE plpgsql;
 
+
+CREATE OR REPLACE FUNCTION nr_results_for_source (INTEGER) RETURNS VOID AS
+$$
+DECLARE
+  test_source_id ALIAS FOR $1;
+BEGIN
+  PERFORM qgrams_results_for_source(test_source_id);
+  PERFORM dist_results_for_source(test_source_id);
+  PERFORM mdl_results_for_source(test_source_id);
+  PERFORM ngrams_results_for_source(test_source_id);
+END
+$$ LANGUAGE plpgsql;
+
+
+/* Probably broken:
 
 CREATE TABLE nr_rwc_results (
        composite text,
@@ -296,3 +300,5 @@ BEGIN
   END LOOP;
 END
 $$ LANGUAGE plpgsql;
+
+*/

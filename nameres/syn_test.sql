@@ -1,168 +1,121 @@
 -- Tables/views/UDFs for synonym matching component of name resolver
 
 -- Housekeeping
-DROP VIEW IF EXISTS in_att_raw_qgrams CASCADE;
-DROP VIEW IF EXISTS in_att_qgrams CASCADE;
-DROP TABLE IF EXISTS att_qgrams CASCADE;
-DROP TABLE IF EXISTS att_qgrams_idf CASCADE;
+DROP VIEW IF EXISTS local_qgrams_raw CASCADE;
+DROP TABLE IF EXISTS local_qgrams CASCADE;
 
-CREATE OR REPLACE FUNCTION att_qgrams_flush () RETURNS void AS
+
+CREATE OR REPLACE FUNCTION qgrams_clean () RETURNS void AS
 $$
 BEGIN
-  RETURN;
-END
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION att_qgrams_clean () RETURNS void AS
-$$
-BEGIN
-  DELETE FROM att_qgrams;
-  DELETE FROM att_qgrams_idf;
+  DELETE FROM local_qgrams;
 END
 $$ LANGUAGE plpgsql;
 
 
 -- Tables/views for qgrams tf-idf
-CREATE VIEW in_att_raw_qgrams AS
-     SELECT source_id, name, qgrams2(name,3) gram
-       FROM in_fields;
+CREATE VIEW local_qgrams_raw AS
+     SELECT id AS "field_id", qgrams2(local_name,3) gram
+       FROM local_fields;
 
-CREATE VIEW in_att_qgrams AS
-     SELECT source_id, name, gram, count(gram) c
-       FROM in_att_raw_qgrams
-   GROUP BY source_id, name, gram;
+CREATE VIEW local_qgrams_vw AS
+     SELECT field_id, gram, count(gram) c
+       FROM local_qgrams_raw
+   GROUP BY field_id, gram;
 
-CREATE TABLE att_qgrams (
-       id serial,
-       att_id integer,
-       gram text,
-       c integer,
-       tf float
+CREATE TABLE local_qgrams (
+       field_id INTEGER,
+       gram TEXT,
+       c INTEGER,
+       tf FLOAT
 );
-CREATE INDEX idx_att_qgrams_gram ON att_qgrams (gram);
-CREATE INDEX idx_att_qgrams_att_id ON att_qgrams (att_id);
 
-CREATE TABLE att_qgrams_idf (
-       id serial,
-       gram text,
-       df integer,
-       idf float NULL
-);
-CREATE INDEX idx_att_qgrams_idf_gram ON att_qgrams_idf (gram);
-
-
-
-CREATE VIEW att_qgrams_min_idf AS
-     SELECT MIN(idf) idf
-       FROM att_qgrams_idf;
-
-CREATE VIEW att_qgrams_norms AS
-     SELECT att_id, sqrt(SUM((a.tf*b.idf)^2)) norm
-       FROM att_qgrams a, att_qgrams_idf b
-      WHERE a.gram = b.gram
-   GROUP BY att_id;
-
-
--- tf-idf for incoming values
-CREATE VIEW in_att_qgrams_query_lens AS
-     SELECT source_id, name, SUM(c) len
-       FROM in_att_qgrams
-   GROUP BY source_id, name;
-
-CREATE VIEW in_att_qgrams_tf AS
-     SELECT a.source_id, a.name, a.gram, (a.c::float / b.len) tf
-       FROM in_att_qgrams a, in_att_qgrams_query_lens b
-      WHERE a.source_id = b.source_id
-        AND a.name = b.name;
-
-CREATE VIEW in_att_qgrams_idf AS
-     SELECT a.gram, COALESCE(a.idf, b.idf) idf
-       FROM att_qgrams_idf a, att_qgrams_min_idf b;
-
-CREATE VIEW in_att_qgrams_norms AS
-     SELECT a.source_id, a.name, sqrt(SUM((a.tf*b.idf)^2)) norm
-       FROM in_att_qgrams_tf a, in_att_qgrams_idf b
-      WHERE a.gram = b.gram
-   GROUP BY a.source_id, a.name;
-
-
-
-
--- Update attribute name tf-idf tables with incoming qgrams.
--- Assumes that local attributes have been matched to globals 
--- in the attribute_clusters table.
-CREATE OR REPLACE FUNCTION syn_load_qgrams () RETURNS void AS
+CREATE OR REPLACE FUNCTION qgrams_preprocess (INTEGER) RETURNS VOID AS
 $$
 DECLARE
-	att_count integer := COUNT(*) FROM global_attributes;
+  new_source_id ALIAS FOR $1;
 BEGIN
 
-  -- Add incoming qgrams to global qgrams table
-  INSERT INTO att_qgrams (att_id, gram, c)
-       SELECT g.global_id, i.gram, SUM(i.c)
-         FROM in_att_qgrams i, attribute_clusters g
-        WHERE i.source_id = g.local_source_id
-          AND i.name = g.local_name
-     GROUP BY g.global_id, i.gram;
-
-  -- Dedup global qgrams table
-  UPDATE att_qgrams a
-     SET c = a.c + b.c
-    FROM att_qgrams b
-   WHERE a.att_id = b.att_id
-     AND a.gram = b.gram
-     AND a.id < b.id;
-
-  DELETE FROM att_qgrams a
-        USING att_qgrams b
-        WHERE a.att_id = b.att_id
-          AND a.gram = b.gram
-	  AND a.id > b.id;
-
-  -- Recompute tf scores
-  UPDATE att_qgrams
-     SET tf = ln(1+c);
-
-  -- Add new grams to idf table
-  INSERT INTO att_qgrams_idf (gram, df)
-       SELECT gram, COUNT(*)
-         FROM att_qgrams
-     GROUP BY gram;
-
-  -- Dedup idf table
-  UPDATE att_qgrams_idf a
-     SET df = a.df + b.df
-    FROM att_qgrams_idf b
-   WHERE a.gram = b.gram
-     AND a.id < b.id;
-
-  DELETE FROM att_qgrams_idf a
-        USING att_qgrams_idf b
-        WHERE a.gram = b.gram
-          AND a.id > b.id;
-
-  -- Recompute idf scores
-  UPDATE att_qgrams_idf
-     SET idf = sqrt(ln(att_count::float / df));
+  -- Get qgram data for local fields
+  INSERT INTO local_qgrams (field_id, gram, c, tf)
+       SELECT *, ln(1+c)
+         FROM local_qgrams_vw
+	WHERE field_id IN (SELECT id FROM local_fields WHERE source_id = new_source_id);
 
 END
 $$ LANGUAGE plpgsql;
 
 
-CREATE OR REPLACE FUNCTION syn_load_results () RETURNS void AS
+-- globalized attribute qgram views
+CREATE VIEW global_qgrams AS
+     SELECT aa.global_id AS "att_id", lq.gram, SUM(lq.c * aa.affinity) AS "c"
+       FROM local_qgrams lq, attribute_affinities aa
+      WHERE lq.field_id = aa.local_id
+   GROUP BY aa.global_id, lq.gram;
+
+CREATE VIEW global_qgrams_tf AS
+     SELECT att_id, gram, ln(1+c) AS "tf"
+       FROM global_qgrams;
+
+CREATE VIEW global_qgrams_n_docs AS
+     SELECT COUNT(DISTINCT att_id) AS "n"
+       FROM global_qgrams;
+
+CREATE VIEW global_qgrams_idf AS
+     SELECT gq.gram, sqrt(ln( nd.n::float / COUNT(DISTINCT att_id) )) AS "idf"
+       FROM global_qgrams gq, global_qgrams_n_docs nd
+   GROUP BY gq.gram, nd.n;
+
+CREATE VIEW global_qgrams_min_idf AS
+     SELECT MIN(idf) AS "idf"
+       FROM global_qgrams_idf;
+
+CREATE VIEW global_qgrams_norms AS
+     SELECT tf.att_id, sqrt(SUM((tf.tf*idf.idf)^2)) norm
+       FROM global_qgrams_tf tf, global_qgrams_idf idf
+      WHERE tf.gram = idf.gram
+   GROUP BY tf.att_id;
+
+
+-- idf and norm values for local fields:
+CREATE VIEW local_qgrams_idf AS
+     SELECT a.gram, COALESCE(a.idf, b.idf) idf
+       FROM global_qgrams_idf a, global_qgrams_min_idf b;
+
+CREATE VIEW local_qgrams_norms AS
+     SELECT tf.field_id, sqrt(SUM((tf.tf*idf.idf)^2)) norm
+       FROM local_qgrams tf, local_qgrams_idf idf
+      WHERE tf.gram = idf.gram
+   GROUP BY tf.field_id;
+
+
+CREATE OR REPLACE FUNCTION qgrams_results_for_source (INTEGER) RETURNS VOID AS
 $$
+DECLARE
+  test_source_id ALIAS FOR $1;
 BEGIN
-  INSERT INTO nr_raw_results (source_id, name, method_name, match, score)
-       SELECT qtf.source_id, qtf.name, 'att_qgrams', dtf.att_id,
-       	      SUM(qtf.tf * qidf.idf * dtf.tf * didf.idf)::float / (qn.norm * dn.norm) score
-         FROM in_att_qgrams_tf qtf, in_att_qgrams_idf qidf, in_att_qgrams_norms qn,
-	      att_qgrams dtf, att_qgrams_idf didf, att_qgrams_norms dn
-        WHERE dtf.gram = qtf.gram
-          AND dtf.gram = qidf.gram
-	  AND dtf.gram = didf.gram
-	  AND qtf.source_id = qn.source_id
-	  AND qtf.name = qn.name
-	  AND dtf.att_id = dn.att_id
-     GROUP BY qtf.source_id, qtf.name, dtf.att_id, qn.norm, dn.norm;
+  PERFORM qgrams_results_for_field_range(MIN(id), MAX(id)) FROM local_fields WHERE source_id = test_source_id;
+END
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION qgrams_results_for_field_range (INTEGER, INTEGER) RETURNS VOID AS
+$$
+DECLARE
+  test_field_min ALIAS FOR $1;
+  test_field_max ALIAS FOR $2;
+BEGIN
+  INSERT INTO nr_raw_results (field_id, method_name, match_id, score)
+       SELECT ltf.field_id, 'qgrams', gtf.att_id,
+       	      SUM(ltf.tf * lidf.idf * gtf.tf * gidf.idf)::float / (ln.norm * gn.norm)
+         FROM local_qgrams ltf, local_qgrams_idf lidf, local_qgrams_norms ln,
+	      global_qgrams_tf gtf, global_qgrams_idf gidf, global_qgrams_norms gn
+        WHERE ltf.gram = gtf.gram
+          AND ltf.gram = lidf.gram
+	  AND ltf.gram = gidf.gram
+	  AND ltf.field_id = ln.field_id
+	  AND gtf.att_id = gn.att_id
+	  AND ltf.field_id >= test_field_min AND ltf.field_id <= test_field_max
+     GROUP BY ltf.field_id, gtf.att_id, ln.norm, gn.norm;
 END
 $$ LANGUAGE plpgsql;

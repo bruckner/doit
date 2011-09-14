@@ -1,87 +1,12 @@
 
 -- Housekeeping
-DROP TABLE IF EXISTS val_dists CASCADE;
-DROP VIEW IF EXISTS in_val_dist_sums CASCADE;
-DROP VIEW IF EXISTS in_val_dists CASCADE;
-
-CREATE OR REPLACE FUNCTION dist_flush () RETURNS void AS
-$$
-BEGIN
-  RETURN;
-END
-$$ LANGUAGE plpgsql;
+DROP TABLE IF EXISTS local_dist_stats CASCADE;
+DROP VIEW IF EXISTS local_dist_sums CASCADE;
 
 CREATE OR REPLACE FUNCTION dist_clean () RETURNS void AS
 $$
 BEGIN
-  DELETE FROM val_dists;
-END
-$$ LANGUAGE plpgsql;
-
-
--- Global data lives here
-CREATE TABLE val_dists (
-       att_id integer,
-       n integer,
-       mean float,
-       variance float
-);
-
-
--- Tables/views for computations
-CREATE VIEW in_val_dist_sums AS
-     SELECT source_id, name, COUNT(*) n,
-            SUM(value::float)::float sm, SUM(value::float*value::float)::float smsqr
-       FROM in_data
-      WHERE to_num(value::text) IS NOT NULL
-   GROUP BY source_id, name;
-
-CREATE VIEW in_val_dists AS
-     SELECT source_id, name, n, sm/n mean, (smsqr - sm*sm/n) / (n-1) variance
-       FROM in_val_dist_sums
-      WHERE n > 1;
-
-
--- Load incoming distribution data into the global set
-CREATE OR REPLACE FUNCTION dist_load () RETURNS void AS
-$$
-BEGIN
-  -- NB: Each local distribution is kept intact in the global dists table.
-  INSERT INTO val_dists (att_id, n, mean, variance)
-       SELECT g.global_id, i.n, i.mean, i.variance
-         FROM in_val_dists i, attribute_clusters g
-	WHERE i.source_id = g.local_source_id
-	  AND i.name = g.local_name;
-END
-$$ LANGUAGE plpgsql;
-
-
--- Load up results!
-CREATE OR REPLACE FUNCTION dist_results () RETURNS void AS
-$$
-BEGIN
-  CREATE TEMP TABLE dist_tmp AS
-       SELECT *
-         FROM (SELECT a.source_id, a.name, b.att_id, 
-                      dist_t_test(a.n, b.n, a.mean, b.mean, a.variance, b.variance) p
-                 FROM in_val_dists a, val_dists b) t
-        WHERE p < 1.0;
-
-  CREATE TEMP TABLE dist_max_tmp AS
-       SELECT source_id, name, att_id, MIN(p) p
-         FROM dist_tmp
-     GROUP BY source_id, name, att_id;
-
-  INSERT INTO nr_raw_results (source_id, name, method_name, match, score)
-       SELECT a.source_id, a.name, 'dist', a.att_id, 1.0 - a.p
-         FROM dist_tmp a, dist_max_tmp b
-	WHERE a.source_id = b.source_id
-	  AND a.name = b.name
-	  AND a.att_id = b.att_id
-	  AND a.p = b.p;
-
-  DROP TABLE dist_tmp;
-  DROP TABLE dist_max_tmp;
+  DELETE FROM local_dist_stats;
 END
 $$ LANGUAGE plpgsql;
 
@@ -93,9 +18,15 @@ CREATE OR REPLACE FUNCTION dist_t_test (
        v1 float,   v2 float
 ) RETURNS float AS
 $$
-
 import math
-import stats
+import sys
+
+try:
+    import stats
+except ImportError:
+    # workaround for system without standard install of pystats
+    sys.path.append('/usca/home/bruckda1/pymods')
+    import stats
 
 if (n1 < 2 or n2 < 2):
    return 2;
@@ -110,5 +41,93 @@ t = abs(m1 - m2) / math.sqrt(s1 + s2)
 df = (s1 + s2)**2 / (s1**2 / (n1-1) + s2**2 / (n2-1))
 
 return 1.0 - stats.lbetai(float(df)/2, 0.5, float(df) / (df + t**2))
-
 $$ LANGUAGE plpythonu;
+
+
+
+-- Local distribution data lives here
+CREATE TABLE local_dist_stats (
+       field_id integer,
+       n integer,
+       mean float,
+       variance float
+);
+
+-- Views for computating distribution statistics
+CREATE VIEW local_dist_sums AS
+     SELECT field_id, COUNT(*) n,
+            SUM(value::float)::float sm, SUM(value::float*value::float)::float smsqr
+       FROM local_data
+      WHERE to_num(value::text) IS NOT NULL
+   GROUP BY field_id;
+
+CREATE VIEW local_dist_stats_vw AS
+     SELECT field_id, n, sm/n AS "mean", (smsqr - sm*sm/n) / (n-1) AS "variance"
+       FROM local_dist_sums
+      WHERE n > 1;
+
+-- Distributions belonging to global attributes live here
+CREATE VIEW global_dist_stats AS
+     SELECT aa.global_id AS "att_id", lds.n, lds.mean, lds.variance, aa.affinity
+       FROM local_dist_stats lds, attribute_affinities aa
+      WHERE lds.field_id = aa.local_id;
+
+
+-- View for comparing distributions
+CREATE VIEW dist_comps AS
+     SELECT l.field_id, g.att_id,
+            dist_t_test(l.n, g.n, l.mean, g.mean, l.variance, g.variance) AS "p",
+	    g.affinity
+       FROM local_dist_stats l, global_dist_stats g
+      WHERE dist_t_test(l.n, g.n, l.mean, g.mean, l.variance, g.variance) < 1.0;
+
+
+-- Load incoming distribution data into the global set
+CREATE OR REPLACE FUNCTION dist_preprocess_source (INTEGER) RETURNS void AS
+$$
+DECLARE
+  new_source_id ALIAS FOR $1;
+BEGIN
+  PERFORM dist_preprocess_field(id) FROM local_fields WHERE source_id = new_source_id;
+END
+$$ LANGUAGE plpgsql;
+
+
+-- Load incoming distribution data into the global set
+CREATE OR REPLACE FUNCTION dist_preprocess_field (INTEGER) RETURNS void AS
+$$
+DECLARE
+  new_field_id ALIAS FOR $1;
+BEGIN
+  INSERT INTO local_dist_stats (field_id, n, mean, variance)
+       SELECT *
+         FROM local_dist_stats_vw
+	WHERE field_id = new_field_id;
+END
+$$ LANGUAGE plpgsql;
+
+
+-- Compare the distribution of one source's fields against all others
+CREATE OR REPLACE FUNCTION dist_results_for_source (INTEGER) RETURNS VOID AS
+$$
+DECLARE
+  test_source_id ALIAS FOR $1;
+BEGIN
+  PERFORM dist_results_for_field(id) FROM local_fields WHERE source_id = test_source_id;
+END
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION dist_results_for_field (INTEGER) RETURNS VOID AS
+$$
+DECLARE
+  test_field_id ALIAS FOR $1;
+BEGIN
+  INSERT INTO nr_raw_results (field_id, match_id, score, method_name)
+       SELECT field_id, att_id, MAX((1.0 - p) * affinity) AS "score", 'dist'
+         FROM dist_comps
+        WHERE field_id = test_field_id
+     GROUP BY field_id, att_id;
+END
+$$ LANGUAGE plpgsql;
+

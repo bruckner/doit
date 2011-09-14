@@ -1,14 +1,13 @@
 -- Relations and functions for factoring run-on attribute names
 
 -- Housekeeping
-DROP TABLE IF EXISTS names_to_factor CASCADE;
+DROP TABLE IF EXISTS fields_to_factor CASCADE;
 DROP TABLE IF EXISTS attribute_synonyms CASCADE;
 
 
 -- Relations
-CREATE TABLE names_to_factor (
-       source_id INT,
-       name TEXT
+CREATE TABLE fields_to_factor (
+       field_id INT
 );
 
 CREATE TABLE attribute_synonyms (
@@ -17,24 +16,24 @@ CREATE TABLE attribute_synonyms (
 );
 
 CREATE VIEW knockout_terms AS
-     SELECT a.source_id, a.name, group_concat(b.token, ','::text) k
-       FROM names_to_factor a, attribute_synonyms b, attribute_clusters c
-      WHERE lower(a.name) LIKE '%' || lower(b.token) || '%'
-        AND a.source_id = c.local_source_id
-	AND a.name = c.local_name
-	AND b.global_id = c.global_id
-   GROUP BY a.source_id, a.name;
+     SELECT lf.id AS "field_id", lf.local_name AS "field_name", group_concat(asyn.token, ','::text) AS "k"
+       FROM local_fields lf, attribute_synonyms asyn, attribute_affinities aa
+      WHERE LOWER(lf.name) LIKE '%' || LOWER(asyn.token) || '%'
+        AND lf.id = aa.local_id
+	AND asyn.global_id = aa.global_id
+	AND lf.id IN (SELECT field_id FROM fields_to_factor)
+   GROUP BY lf.id, lf.local_name;
 
 CREATE VIEW knockouts AS
-     SELECT source_id, name, remove_substrs(name, k) k
+     SELECT field_id, remove_substrs(field_name, k) k
        FROM knockout_terms;
 
 CREATE VIEW leftovers AS
-     SELECT source_id, name, dsubstrs(k) factor
+     SELECT field_id, dsubstrs(k) factor
        FROM knockouts;
 
 CREATE VIEW hidden_gems AS
-     SELECT a.source_id, a.name, a.factor, b.pterm
+     SELECT a.field_id, a.factor, b.pterm
        FROM leftovers a, public.nova_metastore_raw b
       WHERE a.factor = b.token;
 
