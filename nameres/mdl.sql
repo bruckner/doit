@@ -38,7 +38,7 @@ CREATE TABLE global_mdl_dictionaries (
 -- Tables/views for computing description length
 -- In general DL = plogm + avgValLen*(log(alphabetSize)) 
 --               + fplog maxValLen + (f/n)sum_n(sum_p(log (# vals ok /# vals possible)))
--- In our case, p = 1, m = const, alphabetSize = 128, so we get
+-- In our case, p = 1, m = const, alphabetSize = 256, so we get
 -- DL = avgValLen*8 + f*log maxValLen + (f/n) sum_n[log(#vals ok) - log(#vals possible)]
 -- Where n is size of input dict, f is fraction of values accepted,
 -- and (#vals ok/#vals possible) is length specific.
@@ -75,15 +75,17 @@ CREATE VIEW mdl_match_counts_by_len AS
 
 -- Unencoded (generic string) description length
 CREATE VIEW mdl_base_dl AS
-     SELECT field_id, 'STRING'::text domain_name, (1.0 * avglen * ln(255)) dl
+     SELECT field_id, 'STRING'::text domain_name, (1.0 * avglen * 8.0) dl
        FROM mdl_input_stats;
 
+-- Observation: the Potter's Wheel final formula appears to have an error.  Instead, I
+-- use the next to last form, except I sum over lengths, not individual values.
 -- Note: Match fraction f = SUM(card) / (COUNT(*) * n)
 CREATE VIEW mdl_description_length AS
      SELECT i.field_id, i.att_id,
-   	    (SUM(i.card) / COUNT(*) /s.n) * ln(s.maxlen) term1,
-	    (1.0 - (SUM(i.card) / COUNT(*) / s.n)) * s.avglen * ln(255) term2,
-	    ((SUM(i.card) / COUNT(*) / s.n) / s.n) * SUM(ln(i.card::float / l.card)) term3
+   	    (SUM(i.card) / COUNT(*) /s.n) * log(2, s.maxlen) term1,
+	    (1.0 - (SUM(i.card) / COUNT(*) / s.n)) * s.avglen * 8.0 term2,
+	    ((SUM(i.card) / COUNT(*) / s.n) / s.n) * SUM(log(2, (i.card * l.card)::numeric)) term3
        FROM mdl_match_counts_by_len i, mdl_input_stats s, mdl_dict_card_by_len l
       WHERE i.field_id = s.field_id
 	AND i.att_id = l.att_id
