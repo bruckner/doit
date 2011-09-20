@@ -1,27 +1,16 @@
 
 -- Safe text-to-numeric extractor; returns null if s is nonnumeric
-CREATE OR REPLACE FUNCTION to_num (s text) RETURNS numeric AS
+CREATE OR REPLACE FUNCTION to_num(TEXT) RETURNS NUMERIC AS
 $$
-import math
-
-if (s is None):
-   return s
-
-try:
-    n = float(s)
-except ValueError:
-    return None
-
-try:
-    if math.isinf(n) or math.isnan(n):
-    	return None
-except AttributeError:
-    # python < 2.6 does not have math.isinf and math.isnan
-    if n == float('inf') or n == float('-inf') or n != n:
-        return None
-
-return n
-$$ LANGUAGE plpythonu;
+DECLARE
+  s ALIAS FOR $1;
+BEGIN
+  RETURN s::NUMERIC;
+EXCEPTION
+  WHEN DATA_EXCEPTION THEN
+   RETURN NULL;
+END
+$$ LANGUAGE plpgsql;
 
 
 -- Generate a list of random source_ids
