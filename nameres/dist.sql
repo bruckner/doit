@@ -47,22 +47,22 @@ $$ LANGUAGE plpythonu;
 
 -- Local distribution data lives here
 CREATE TABLE local_dist_stats (
-       field_id integer,
-       n integer,
-       mean float,
-       variance float
+       field_id INTEGER,
+       n INTEGER,
+       mean FLOAT,
+       variance FLOAT
 );
 
 -- Views for computating distribution statistics
 CREATE VIEW local_dist_sums AS
      SELECT field_id, COUNT(*) n,
-            SUM(value::float)::float sm, SUM(value::float*value::float)::float smsqr
+            SUM(value::NUMERIC) sm, SUM((value::NUMERIC)^2) smsqr
        FROM local_data
-      WHERE to_num(value::text) IS NOT NULL
+      WHERE to_num(value::TEXT) IS NOT NULL
    GROUP BY field_id;
 
 CREATE VIEW local_dist_stats_vw AS
-     SELECT field_id, n, sm/n AS "mean", (smsqr - sm*sm/n) / (n-1) AS "variance"
+     SELECT field_id, n, (sm/n)::FLOAT AS "mean", ((smsqr - sm*sm/n) / (n-1))::FLOAT AS "variance"
        FROM local_dist_sums
       WHERE n > 1;
 
@@ -103,6 +103,9 @@ BEGIN
        SELECT *
          FROM local_dist_stats_vw
 	WHERE field_id = new_field_id;
+EXCEPTION
+  WHEN NUMERIC_VALUE_OUT_OF_RANGE THEN
+    RETURN;
 END
 $$ LANGUAGE plpgsql;
 
