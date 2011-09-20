@@ -141,7 +141,6 @@ CREATE VIEW nr_mcomp_nice_results AS
  INNER JOIN local_sources s ON s.id = f.source_id
  INNER JOIN public.doit_fields pdf ON pdf.source_id = s.local_id::INTEGER AND pdf.name = f.local_name;
 
-
 CREATE VIEW nr_mcomp_error_rates AS
      SELECT f.c tot, COUNT(*) n,
             COUNT(CASE WHEN is_correct THEN 1 ELSE NULL END) n_correct,
@@ -153,49 +152,6 @@ CREATE VIEW nr_mcomp_error_rates AS
 	    COUNT(CASE WHEN is_correct OR is_correct IS NULL THEN NULL ELSE 1 END) ratio
        FROM nr_mcomp_nice_results r, nr_field_count f
    GROUP BY f.c;
-
-
--- UDF to run all active processing methods
-CREATE OR REPLACE FUNCTION nr_test_source (integer) RETURNS void AS
-$$
-DECLARE
-  test_source_id int = $1;
-BEGIN
-
-  IF EXISTS (SELECT 1 FROM integration_methods WHERE method_name = 'att_qgrams' AND active = 't') THEN
-    RAISE INFO 'Performing attribute synonym matching with qgrams...';
-    PERFORM att_qgrams_test_source(test_source_id);
-    RAISE INFO '  done.';
-  END IF;
-
-  IF EXISTS (SELECT 1 FROM integration_methods WHERE method_name = 'mdl' AND active = 't') THEN
-    RAISE INFO 'Performing MDL dictionary matching...';
-    PERFORM mdl_test_source(test_source_id);
-    RAISE INFO '  done.';
-  END IF;
-
-  IF EXISTS (SELECT 1 FROM integration_methods WHERE method_name = 'val_qgrams' AND active = 't') THEN
-    RAISE INFO 'Performing value-set matching with qgrams...';
-    PERFORM val_qgrams_stage();
-    PERFORM val_qgrams_results();
-    RAISE INFO '  done.';
-  END IF;
-
-  IF EXISTS (SELECT 1 FROM integration_methods WHERE method_name = 'val_ngrams' AND active = 't') THEN
-    RAISE INFO 'Performing value-set matching with ngrams...';
-    PERFORM val_ngrams_stage();
-    PERFORM val_ngrams_results();
-    RAISE INFO '  done.';
-  END IF;
-
-  IF EXISTS (SELECT 1 FROM integration_methods WHERE method_name = 'dist' AND active = 't') THEN
-    RAISE INFO 'Performing value-set distribution t-test matching...';
-    PERFORM dist_test_source();
-    RAISE INFO '  done.';
-  END IF;
-
-END
-$$ LANGUAGE plpgsql;
 
 
 -- Load results for composite scoring methods
