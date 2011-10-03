@@ -129,7 +129,7 @@ $$
 BEGIN
     PERFORM qgrams_preprocess($1);
     PERFORM dist_preprocess_source($1);
-    --PERFORM mdl_preprocess($1);
+    PERFORM mdl_preprocess_source($1);
     PERFORM ngrams_preprocess_source($1);
 END
 $$ LANGUAGE 'plpgsql';
@@ -138,6 +138,9 @@ $$ LANGUAGE 'plpgsql';
 CREATE OR REPLACE FUNCTION preprocess_global () RETURNS VOID AS
 $$
 BEGIN
+  RAISE INFO 'Preparing qgrams global index...';
+  PERFORM qgrams_preprocess_global();
+  RAISE INFO '  done.';
   RAISE INFO 'Preparing MDL global dictionaries...';
   PERFORM mdl_preprocess_global();
   RAISE INFO '  done.';

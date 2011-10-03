@@ -37,21 +37,14 @@ s2 = v2 / n2
 if (s1 <= 0 or s2 <= 0):
    return 3;
 
-t = abs(m1 - m2) / math.sqrt(s1 + s2)
-df = (s1 + s2)**2 / (s1**2 / (n1-1) + s2**2 / (n2-1))
+try:
+    t = abs(m1 - m2) / math.sqrt(s1 + s2)
+    df = (s1 + s2)**2 / (s1**2 / (n1-1) + s2**2 / (n2-1))
+    return 1.0 - stats.lbetai(float(df)/2, 0.5, float(df) / (df + t**2))
+except OverflowError:
+    return 4
 
-return 1.0 - stats.lbetai(float(df)/2, 0.5, float(df) / (df + t**2))
 $$ LANGUAGE plpythonu;
-
-
-
--- Local distribution data lives here
-CREATE TABLE local_dist_stats (
-       field_id INTEGER,
-       n INTEGER,
-       mean FLOAT,
-       variance FLOAT
-);
 
 -- Views for computating distribution statistics
 CREATE VIEW local_dist_sums AS
@@ -66,18 +59,31 @@ CREATE VIEW local_dist_stats_vw AS
        FROM local_dist_sums
       WHERE n > 1;
 
+-- Local distribution data lives here
+CREATE TABLE local_dist_stats (
+       source_id INTEGER,
+       field_id INTEGER,
+       n INTEGER,
+       mean FLOAT,
+       variance FLOAT
+);
+CREATE INDEX idx_local_dist_stats_source_id ON local_dist_stats (source_id);
+CREATE INDEX idx_local_dist_stats_field_id ON local_dist_stats (field_id);
+
 -- Distributions belonging to global attributes live here
-CREATE VIEW global_dist_stats AS
-     SELECT aa.global_id AS "att_id", lds.n, lds.mean, lds.variance, aa.affinity
-       FROM local_dist_stats lds, attribute_affinities aa
-      WHERE lds.field_id = aa.local_id;
+CREATE TABLE global_dist_stats (
+       att_id INTEGER,
+       n INTEGER,
+       mean FLOAT,
+       variance FLOAT,
+       affinity FLOAT
+);
 
 
 -- View for comparing distributions
 CREATE VIEW dist_comps AS
-     SELECT l.field_id, g.att_id,
-            dist_t_test(l.n, g.n, l.mean, g.mean, l.variance, g.variance) AS "p",
-	    g.affinity
+     SELECT l.source_id, l.field_id, g.att_id, g.affinity,
+            dist_t_test(l.n, g.n, l.mean, g.mean, l.variance, g.variance) AS "p"
        FROM local_dist_stats l, global_dist_stats g
       WHERE dist_t_test(l.n, g.n, l.mean, g.mean, l.variance, g.variance) < 1.0;
 
@@ -88,24 +94,36 @@ $$
 DECLARE
   new_source_id ALIAS FOR $1;
 BEGIN
-  PERFORM dist_preprocess_field(id) FROM local_fields WHERE source_id = new_source_id;
+  PERFORM dist_preprocess_field(id, new_source_id) FROM local_fields WHERE source_id = new_source_id;
 END
 $$ LANGUAGE plpgsql;
 
 
 -- Load incoming distribution data into the global set
-CREATE OR REPLACE FUNCTION dist_preprocess_field (INTEGER) RETURNS void AS
+CREATE OR REPLACE FUNCTION dist_preprocess_field (INTEGER, INTEGER) RETURNS void AS
 $$
 DECLARE
   new_field_id ALIAS FOR $1;
+  new_source_id ALIAS FOR $2;
 BEGIN
-  INSERT INTO local_dist_stats (field_id, n, mean, variance)
-       SELECT *
+  INSERT INTO local_dist_stats (source_id, field_id, n, mean, variance)
+       SELECT new_source_id, *
          FROM local_dist_stats_vw
 	WHERE field_id = new_field_id;
 EXCEPTION
   WHEN NUMERIC_VALUE_OUT_OF_RANGE THEN
     RETURN;
+END
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION dist_preprocess_global () RETURNS VOID AS
+$$
+BEGIN
+  INSERT INTO global_dist_stats (att_id, n, mean, variance, affinity)
+       SELECT aa.global_id, lds.n, lds.mean, lds.variance, aa.affinity
+         FROM local_dist_stats lds, attribute_affinities aa
+        WHERE lds.field_id = aa.local_id;
 END
 $$ LANGUAGE plpgsql;
 
@@ -116,7 +134,11 @@ $$
 DECLARE
   test_source_id ALIAS FOR $1;
 BEGIN
-  PERFORM dist_results_for_field(id) FROM local_fields WHERE source_id = test_source_id;
+  INSERT INTO nr_raw_results (field_id, match_id, score, method_name)
+       SELECT field_id, att_id, MAX((1.0 - p) * affinity) AS "score", 'dist'
+         FROM dist_comps
+        WHERE source_id = test_source_id
+     GROUP BY field_id, att_id;
 END
 $$ LANGUAGE plpgsql;
 

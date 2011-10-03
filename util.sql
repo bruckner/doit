@@ -41,7 +41,7 @@ BEGIN
 END
 $$ LANGUAGE plpgsql;
 
-DROP AGGREGATE IF EXISTS group_concat (text, text);
+DROP AGGREGATE IF EXISTS group_concat (text, text) CASCADE;
 CREATE AGGREGATE group_concat (text, text) (
        stype = text,
        sfunc = agg_concat,
