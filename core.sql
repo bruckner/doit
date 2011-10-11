@@ -91,6 +91,7 @@ GROUP BY s.id, d.entity_id;
 	  AND f.local_name = d.name
 	  AND e.source_id = s.id
 	  AND e.local_id::int = d.entity_id
+	  AND length(d.value) < 1300
 	  AND d.value IS NOT NULL;
 
   PERFORM preprocess_source(new_source_id);

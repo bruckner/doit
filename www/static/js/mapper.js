@@ -71,7 +71,7 @@ function toggle_match_list (mlist) {
 
 
 
-/* action buttons (coming soon...) */
+/* action buttons */
 var actions = $('.actions');
 var accept_buttons = $('.accept', actions);
 var reject_buttons = $('.reject', actions);
@@ -159,9 +159,10 @@ $('[value="Save"]', panel).click( function () {
 var detail_buttons = $('.detail', actions);
 
 $(detail_buttons).each( function () {
-    var attr_name = encodeURIComponent($(this).closest('tr').children().first().text());
+//    var attr_name = encodeURIComponent($(this).closest('tr').children().first().text());
+    var fid = $(this).closest('tr').attr('id').slice(3);
     $(this).click( function () {
-	fill_popover('./!' + attr_name + '/summary', 600);
+	fill_popover('./' + fid + '/summary', 600);
     });
 });
 

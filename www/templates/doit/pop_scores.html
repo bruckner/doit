@@ -17,13 +17,13 @@
     <tr>
       <td class="header">Synonyms</td>
       {% for match in matches|slice:":4" %}
-      <td>{{ match.att_qgrams|default:0|floatformat:3 }}</td>
+      <td>{{ match.qgrams|default:0|floatformat:3 }}</td>
       {% endfor %}
     </tr>
     <tr>
       <td class="header">N-grams</td>
       {% for match in matches|slice:":4" %}
-      <td>{{ match.val_ngrams|default:"0"|floatformat:3 }}</td>
+      <td>{{ match.ngrams|default:"0"|floatformat:3 }}</td>
       {% endfor %}
     </tr>
     <tr>

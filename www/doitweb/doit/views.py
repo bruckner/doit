@@ -13,17 +13,21 @@ def source_index(req, dbname):
 
 def mapper(req, sid, dbname):
 	db = DoitDB(dbname)
+	meta = db.source_meta(sid)
 	matchscores = db.matches(sid)
 	egs = db.examplevalues(sid)
 
 	attr_list = []
-	for name in matchscores:
-		egs.setdefault(name, None)
-		cand = sorted(matchscores[name], key=itemgetter(2), reverse=True)
-		attr_list.append({'name': name, 'candidates': cand, 'example': (egs[name])})
+	for k in matchscores:
+		name = k.rsplit(':',1)[0]
+		fid = k.rsplit(':',1)[1]
+		egs.setdefault(fid, None)
+		cand = sorted(matchscores[k], key=itemgetter(2), reverse=True)
+		attr_list.append({'name': name, 'fid': fid, 'candidates': cand, 'example': (egs[fid])})
 
-	return render_to_response('doit/mapper.html', {'attr_list': attr_list, 'source_id': sid})
+	return render_to_response('doit/mapper.html', {'attr_list': attr_list, 'source_id': sid, 'metadata': meta,})
 
+# Handles new mapping POST
 def mapper_results(req, sid, dbname):
 	db = DoitDB(dbname)
 
@@ -34,6 +38,7 @@ def mapper_results(req, sid, dbname):
 	return HttpResponse(s)
 
 
+# currently broken...
 def lowscoremapper(req, dbname):
 	db = DoitDB(dbname)
 	matchscores = db.lowscorers(25)
@@ -46,22 +51,23 @@ def lowscoremapper(req, dbname):
 	return render_to_response('doit/mapper.html', {'attr_list': attr_list})
 
 
-def detail_summary(req, sid, dbname, attr_name):
+def detail_summary(req, sid, dbname, fid):
 	db = DoitDB(dbname)
-
-	vals = db.fieldexamples(sid, attr_name, 1000, distinct=False)
+	attr_name = db.fieldname(fid)
+	meta = db.field_meta(fid)
+	vals = db.fieldexamples(fid, 1000, distinct=False)
 	histo = bucketize(vals)
-
-	#meta = db.fieldmeta(sid, attr_name)
-
-	return render_to_response('doit/pop_summary.html', {'histo': histo, 'attr_name': attr_name, 'source': sid})
+	return render_to_response('doit/pop_summary.html', {'histo': histo, 'attr_name': attr_name, 'source': sid, 'fid': fid, 'metadata': meta,})
 
 
-def detail_examples(req, sid, dbname, attr_name):
+def detail_examples(req, sid, dbname, fid):
 	db = DoitDB(dbname)
 
-	egs = [{'name': attr_name, 'values': db.fieldexamples(sid, attr_name, 10)}]
-	matches = db.matches(sid)[attr_name][:5]
+	attr_name = db.fieldname(fid)
+	k = attr_name + ':' + str(fid)
+
+	egs = [{'name': attr_name, 'values': db.fieldexamples(fid, 10)}]
+	matches = db.matches(sid)[k][:5]
 
 	for match in matches:
 		egs.append({'name': match[0], 'values': db.globalfieldexamples(match[1], 10)})
@@ -77,16 +83,19 @@ def detail_examples(req, sid, dbname, attr_name):
 			except IndexError:
 				transpose[i+1].append(' ')
 
-	return render_to_response('doit/pop_egs.html', {'examples': transpose, 'attr_name': attr_name,})
+	return render_to_response('doit/pop_egs.html', {'examples': transpose, 'attr_name': attr_name, 'fid': fid,})
 
 
-def detail_shared(req, sid, dbname, attr_name):
+def detail_shared(req, sid, dbname, fid):
 	db = DoitDB(dbname)
 
+	attr_name = db.fieldname(fid)
+	k = attr_name + ':' + str(fid)
+
 	shared = []
-	matches = db.matches(sid)[attr_name]
+	matches = db.matches(sid)[k]
 	for match in matches:
-		shared.append({'name': match[0], 'values': db.sharedvalues(sid, attr_name, match[1])})
+		shared.append({'name': match[0], 'values': db.sharedvalues(fid, match[1])})
 
 	table = [[]]
 	for match in shared:
@@ -99,30 +108,36 @@ def detail_shared(req, sid, dbname, attr_name):
 			except IndexError:
 				table[i+1].append(' ')
 
-	return render_to_response('doit/pop_shared.html', {'shared': table, 'attr_name': attr_name,})
+	return render_to_response('doit/pop_shared.html', {'shared': table, 'attr_name': attr_name, 'fid': fid,})
 
 
-def detail_distro(req,  dbname, sid, attr_name):
+def detail_distro(req,  dbname, sid, fid):
 	db = DoitDB(dbname)
-	vals = db.fieldexamples(sid, attr_name, 1000, distinct=False)
+
+	attr_name = db.fieldname(fid)
+	k = attr_name + ':' + str(fid)
+
+	vals = db.fieldexamples(fid, 1000, distinct=False)
 
 	histos = [bucketize(vals)]
 	histos[0]['name'] = attr_name
 
-	matches = sorted(db.matches(sid)[attr_name], key=lambda match: match[2], reverse=True)[:4]
+	matches = sorted(db.matches(sid)[k], key=lambda match: match[2], reverse=True)[:4]
 
 	for match in matches:
 		histo = bucketize(db.globalfieldexamples(match[1], n=1000, distinct=False))
 		histo['name'] = match[0]
 		histos.append(histo)
 
-	return render_to_response('doit/pop_distro.html', {'histos': histos, 'attr_name': attr_name,})
+	return render_to_response('doit/pop_distro.html', {'histos': histos, 'attr_name': attr_name, 'fid': fid,})
 
 
-def detail_scoring(req, dbname, sid, attr_name):
+def detail_scoring(req, dbname, sid, fid):
 	db = DoitDB(dbname)
-	matches = db.indivscores(sid, attr_name)
-	return render_to_response('doit/pop_scores.html', {'matches': matches, 'attr_name': attr_name,})
+	attr_name = db.fieldname(fid)
+
+	matches = db.indivscores(fid)
+	return render_to_response('doit/pop_scores.html', {'matches': matches, 'attr_name': attr_name, 'fid': fid,})
 
 
 

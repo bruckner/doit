@@ -8,9 +8,9 @@
     <div style="border:1px solid #EDEDED;border-radius:8px;">
       <p>About source {{ source_id }}</p>
       <table>
-	<tr><td style="padding-right:1em;text-align:right;font-weight:bold;">Name:</td><td>Example Name</td>
-	<tr><td style="padding-right:1em;text-align:right;font-weight:bold;">Description:</td><td>An interesting bit of data</td>
-	<tr><td style="padding-right:1em;text-align:right;font-weight:bold;">Operator:</td><td>Dr. Frankenstein</td>
+	{% for meta in metadata %}
+	<tr><td style="padding-right:1em;text-align:right;font-weight:bold;">{{ meta.name }}</td><td>{{ meta.value|truncatewords:10 }}</td></tr>
+	{% endfor %}
       </table>
   </div>
   {% if attr_list %}
@@ -26,7 +26,7 @@
     {% for attr in attr_list %}
     <div>
       <table>
-	<tr>
+	<tr id="fid{{ attr.fid }}">
 	  <td class="attr" title='e.g. "{{ attr.example|striptags|truncatewords:6 }}"'>{{ attr.name }}</td>
 	  <td class="match">
 	      <div class="button">V</div>

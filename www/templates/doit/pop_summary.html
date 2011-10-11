@@ -15,8 +15,11 @@
   {% endif %}
 
   <div>About {{ attr_name }}:</div>
-
-  <div>About source {{ source }}:</div>
+  <table>
+    {% for meta in metadata %}
+    <tr><th style="text-align:left;">{{ meta.name }}</th><td>{{ meta.value }}</td></tr>
+    {% endfor %}
+  </table>
 
 </div>
 {% endblock content %}
