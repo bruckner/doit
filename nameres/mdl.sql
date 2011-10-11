@@ -1,18 +1,11 @@
 -- Tables/Views/UDFs used for MDL name resolution
 
--- Housekeeping
-DROP TABLE IF EXISTS local_mdl_dictionaries CASCADE;
-DROP TABLE IF EXISTS global_mdl_dictionaries CASCADE;
-DROP VIEW IF EXISTS mdl_dict_card_by_len_vw CASCADE;
-DROP TABLE IF EXISTS mdl_dict_card_by_len CASCADE;
-DROP VIEW IF EXISTS mdl_input_stats CASCADE;
-DROP TABLE IF EXISTS mdl_base_dl CASCADE;
-
 CREATE OR REPLACE FUNCTION mdl_clean () RETURNS void AS
 $$
 BEGIN
   DELETE FROM local_mdl_dictionaries;
   DELETE FROM global_mdl_dictionaries;
+  DELETE FROM mdl_input_stats;
   DELETE FROM mdl_dict_card_by_len;
   DELETE FROM mdl_base_dl;
 END
@@ -52,11 +45,6 @@ CREATE TABLE global_mdl_dictionaries (
 -- Note on affinities and MDL: elements are now considered to only fractionally
 -- belong to global dictionaries, with fraction = affinity(local_dict(element), global_dict)
 
-CREATE VIEW mdl_dict_card_by_len_vw AS
-     SELECT att_id, length(value) l, SUM(affinity) card
-       FROM global_mdl_dictionaries
-   GROUP BY att_id, l;
-
 CREATE TABLE mdl_dict_card_by_len (
        att_id INTEGER,
        l INTEGER,
@@ -71,10 +59,6 @@ CREATE TABLE mdl_input_stats (
        avglen FLOAT,
        maxlen FLOAT
 );
-     SELECT source_id, field_id, SUM(c) n,
-            SUM(length(value) * c)::FLOAT / SUM(c) AS "avglen", MAX(length(value)) AS "maxlen"
-       FROM local_mdl_dictionaries
-   GROUP BY source_id, field_id;
 
 CREATE VIEW mdl_matches AS
      SELECT i.source_id, i.field_id, d.att_id, i.value, (i.c * d.affinity) AS c
@@ -131,17 +115,17 @@ BEGIN
 	  AND value IS NOT NULL
      GROUP BY field_id, value;
 
-  INSERT INTO mdl_base_dl (field_id, domain_name, dl)
-       SELECT field_id, 'STRING'::text, (1.0 * avglen * 8.0)
-         FROM mdl_input_stats
-        WHERE field_id = new_field_id;
-
   INSERT INTO mdl_input_stats (source_id, field_id, n, avglen, maxlen)
        SELECT source_id, field_id, SUM(c),
               SUM(length(value) * c)::FLOAT / SUM(c), MAX(length(value))::FLOAT
          FROM local_mdl_dictionaries
         WHERE field_id = new_field_id
      GROUP BY source_id, field_id;
+
+  INSERT INTO mdl_base_dl (field_id, domain_name, dl)
+       SELECT field_id, 'STRING'::text, (1.0 * avglen * 8.0)
+         FROM mdl_input_stats
+        WHERE field_id = new_field_id;
 END
 $$ LANGUAGE plpgsql;
 
@@ -155,9 +139,13 @@ BEGIN
          FROM global_mdl_dictionaries_vw;
 
   TRUNCATE mdl_dict_card_by_len;
-  INSERT INTO mdl_dict_card_by_len
-       SELECT *
-         FROM mdl_dict_card_by_len_vw;
+  INSERT INTO mdl_dict_card_by_len (att_id, l, card)
+     SELECT att_id, length(value), SUM(affinity)
+       FROM global_mdl_dictionaries
+   GROUP BY att_id, length(value);
+
+  UPDATE mdl_dict_card_by_len
+     SET lg_card = log(2, card);
 END
 $$ LANGUAGE plpgsql;
 
@@ -167,7 +155,12 @@ $$
 DECLARE
   test_source ALIAS FOR $1;
 BEGIN
-  PERFORM mdl_results_for_field(id) FROM local_fields WHERE source_id = test_source;
+  -- Description length normalized by base (generic string) DL, then subtracted from 1
+  INSERT INTO nr_raw_results (field_id, method_name, match_id, score)
+  SELECT a.field_id, 'mdl', a.att_id, GREATEST(0, 1.0 - (a.term1+a.term2+a.term3) / b.dl)
+    FROM mdl_description_length a, mdl_base_dl b
+   WHERE a.field_id = b.field_id
+     AND a.source_id = test_source;
 END
 $$ LANGUAGE plpgsql;
 

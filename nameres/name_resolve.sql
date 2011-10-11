@@ -1,10 +1,5 @@
 -- Tables, views, and functions for name resolution
 
--- Housekeeping
-DROP TABLE IF EXISTS nr_raw_results CASCADE;
-DROP TABLE IF EXISTS nr_ncomp_results_tbl CASCADE;
-DROP TABLE IF EXISTS nr_rwc_results;
-
 CREATE OR REPLACE FUNCTION nr_clean () RETURNS void AS
 $$
 BEGIN
@@ -171,6 +166,9 @@ BEGIN
   RAISE INFO 'nr_test: Importing test data...';
   CREATE TEMP TABLE test_sources_tmp AS
   SELECT import_random AS "source_id" FROM import_random($1, $2);
+
+  RAISE INFO 'done.  Preprocessing...';
+  PERFORM preprocess_global();
 
   RAISE INFO 'done.  Computing results...';
   PERFORM nr_results_for_source(source_id) FROM test_sources_tmp;

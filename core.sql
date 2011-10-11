@@ -1,15 +1,3 @@
-
--- Housekeeping
-DROP TABLE IF EXISTS local_sources CASCADE;
-DROP TABLE IF EXISTS local_source_meta CASCADE;
-DROP TABLE IF EXISTS local_fields CASCADE;
-DROP TABLE IF EXISTS local_field_meta CASCADE;
-DROP TABLE IF EXISTS local_entities CASCADE;
-DROP TABLE IF EXISTS local_data CASCADE;
-
-DROP TABLE IF EXISTS in_sources CASCADE;
-
-
 -- Tables for local data and metadata
 CREATE TABLE local_sources (
 	id serial,
@@ -128,7 +116,7 @@ $$ LANGUAGE 'plpgsql';
 CREATE OR REPLACE FUNCTION preprocess_source (integer) RETURNS VOID AS
 $$
 BEGIN
-    PERFORM qgrams_preprocess($1);
+    PERFORM qgrams_preprocess_source($1);
     PERFORM dist_preprocess_source($1);
     PERFORM mdl_preprocess_source($1);
     PERFORM ngrams_preprocess_source($1);

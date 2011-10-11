@@ -1,12 +1,5 @@
 -- Tables/views/UDFs for synonym matching component of name resolver
 
--- Housekeeping
-DROP VIEW IF EXISTS local_qgrams_raw CASCADE;
-DROP TABLE IF EXISTS local_qgrams CASCADE;
-DROP TABLE IF EXISTS local_qgrams_norms CASCADE;
-DROP TABLE IF EXISTS global_qgrams CASCADE;
-DROP TABLE IF EXISTS qgrams_idf CASCADE;
-
 CREATE OR REPLACE FUNCTION qgrams_clean () RETURNS void AS
 $$
 BEGIN
@@ -69,7 +62,7 @@ CREATE VIEW qgrams_cosine_similarity AS
    GROUP BY ltf.source_id, ltf.field_id, gtf.att_id, ln.norm, gn.norm;
 
 
-CREATE OR REPLACE FUNCTION qgrams_preprocess (INTEGER) RETURNS VOID AS
+CREATE OR REPLACE FUNCTION qgrams_preprocess_source (INTEGER) RETURNS VOID AS
 $$
 DECLARE
   new_source_id ALIAS FOR $1;

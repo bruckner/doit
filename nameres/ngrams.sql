@@ -1,14 +1,5 @@
 -- Tables, views, and UDFs for value ngram matching method for name resolution
 
--- Housekeeping
-DROP VIEW IF EXISTS local_ngrams_raw CASCADE;
-DROP TABLE IF EXISTS local_ngrams CASCADE;
-DROP TABLE IF EXISTS global_ngrams CASCADE;
-DROP TABLE IF EXISTS ngrams_idf CASCADE;
-DROP TABLE IF EXISTS global_ngrams_norms CASCADE;
-DROP TABLE IF EXISTS local_ngrams_norms CASCADE;
-
-
 CREATE OR REPLACE FUNCTION ngrams_clean () RETURNS void AS
 $$
 BEGIN
@@ -188,7 +179,7 @@ BEGIN
 
   -- Recompute global norms
   TRUNCATE global_ngrams_norms;
-  INSERT INTO global_ngrams_norms
+  INSERT INTO global_ngrams_norms (att_id, norm)
        SELECT a.att_id, sqrt(SUM((a.tf*b.idf)^2))
          FROM global_ngrams a, ngrams_idf b
         WHERE a.gram = b.gram
@@ -196,11 +187,11 @@ BEGIN
 
   -- Recompute local norms
   TRUNCATE local_ngrams_norms;
-  INSERT INTO local_ngrams_norms
-       SELECT tf.field_id, sqrt(SUM((tf.tf*idf.idf)^2))
+  INSERT INTO local_ngrams_norms (source_id, field_id, norm)
+       SELECT tf.source_id, tf.field_id, sqrt(SUM((tf.tf*idf.idf)^2))
          FROM local_ngrams tf, ngrams_idf idf
         WHERE tf.gram = idf.gram
-     GROUP BY tf.field_id;
+     GROUP BY tf.source_id, tf.field_id;
 
 END
 $$ LANGUAGE plpgsql;

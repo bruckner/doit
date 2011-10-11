@@ -1,7 +1,4 @@
-
--- Housekeeping
-DROP TABLE IF EXISTS local_dist_stats CASCADE;
-DROP VIEW IF EXISTS local_dist_sums CASCADE;
+-- Distribution analysis module
 
 CREATE OR REPLACE FUNCTION dist_clean () RETURNS void AS
 $$
@@ -46,6 +43,7 @@ except OverflowError:
     return 4
 
 $$ LANGUAGE plpythonu;
+
 
 -- Views for computating distribution statistics
 CREATE VIEW local_dist_sums AS
