@@ -64,7 +64,13 @@ CREATE TABLE mdl_dict_card_by_len (
        lg_card FLOAT
 );
 
-CREATE VIEW mdl_input_stats AS
+CREATE TABLE mdl_input_stats (
+       source_id INTEGER,
+       field_id INTEGER,
+       n INTEGER,
+       avglen FLOAT,
+       maxlen FLOAT
+);
      SELECT source_id, field_id, SUM(c) n,
             SUM(length(value) * c)::FLOAT / SUM(c) AS "avglen", MAX(length(value)) AS "maxlen"
        FROM local_mdl_dictionaries
@@ -92,7 +98,7 @@ CREATE TABLE mdl_base_dl (
 -- Note: Match fraction f = SUM(card) / (COUNT(*) * n)
 CREATE VIEW mdl_description_length AS
      SELECT i.source_id, i.field_id, i.att_id,
-   	    (SUM(i.card) / COUNT(*) /s.n) * log(2, s.maxlen) term1,
+   	    (SUM(i.card) / COUNT(*) /s.n) * log(2, s.maxlen::NUMERIC) term1,
 	    (1.0 - (SUM(i.card) / COUNT(*) / s.n)) * s.avglen * 8.0 term2,
 	    ((SUM(i.card) / COUNT(*) / s.n) / s.n) * SUM(i.lg_card + l.lg_card) term3
        FROM mdl_match_counts_by_len i, mdl_input_stats s, mdl_dict_card_by_len l
@@ -126,9 +132,16 @@ BEGIN
      GROUP BY field_id, value;
 
   INSERT INTO mdl_base_dl (field_id, domain_name, dl)
-   SELECT field_id, 'STRING'::text, (1.0 * avglen * 8.0)
-       FROM mdl_input_stats
-      WHERE field_id = new_field_id;
+       SELECT field_id, 'STRING'::text, (1.0 * avglen * 8.0)
+         FROM mdl_input_stats
+        WHERE field_id = new_field_id;
+
+  INSERT INTO mdl_input_stats (source_id, field_id, n, avglen, maxlen)
+       SELECT source_id, field_id, SUM(c),
+              SUM(length(value) * c)::FLOAT / SUM(c), MAX(length(value))::FLOAT
+         FROM local_mdl_dictionaries
+        WHERE field_id = new_field_id
+     GROUP BY source_id, field_id;
 END
 $$ LANGUAGE plpgsql;
 
