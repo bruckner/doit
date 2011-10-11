@@ -21,7 +21,7 @@ class DoitDB:
 
     def sources(self):
         cur = self.conn.cursor()
-        cur.execute('SELECT source_id FROM local_fields WHERE id IN (SELECT field_id FROM nr_raw_results);')
+        cur.execute('SELECT DISTINCT source_id FROM local_fields WHERE id IN (SELECT field_id FROM nr_raw_results);')
         
         source_list = []
         for s in cur.fetchall():
@@ -29,6 +29,18 @@ class DoitDB:
 
         cur.close()
         return source_list
+
+    def process_source(self, source_id, method_index):
+	cur = self.conn.cursor()
+	methods = ['nr', 'qgrams', 'dist', 'mdl', 'ngrams']
+	method_name = methods[int(method_index)]
+	if method_name == 'nr':
+	    cur.execute('SELECT nr_composite_load();')
+	else:
+	    cmd = 'SELECT ' + method_name + '_results_for_source(%s);'
+	    cur.execute(cmd, (source_id,))
+	self.conn.commit()
+	return method_name
 
     def source_meta(self, source_id):
         cur = self.conn.cursor()

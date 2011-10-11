@@ -4,7 +4,19 @@
 
 {% block content %}
     <div style="margin:0 auto;width:800px;">
-      <a href="./lowscorers/">Lowest scoring attributes</a>
+      <!--<a href="./lowscorers/">Lowest scoring attributes</a>-->
+      <form id="process-source-form" action="/doit/{{ dbname }}/process/">
+        <fieldset>
+          <legend>Process a new source</legend>
+          <div>
+            <label for="new-source">Enter source ID here:</label>
+            <input type="text" id="new-source" name="sid" value=""></input>
+            <input type="submit" name="submit" value="Go"></input>
+          </div>
+          <div>Note: processing results may take a few minutes!</div>
+          <div>Status: <span class="status"></span></div>
+        </fieldset>
+      </form>
       {% if source_list %}
       <h3>Available Sources:</h3>
       <ul>
@@ -17,3 +29,5 @@
       {% endif %}
     </div>
 {% endblock content %}
+
+{% block jquery %}<script type="text/javascript" src="/static/js/jquery.sourceProcessor.js"></script>{% endblock jquery %}

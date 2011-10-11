@@ -5,11 +5,14 @@
 {% block content %}
   <div>
     <h2>Map Attributes for Source {{ source_id }}</h2>
-    <div style="border:1px solid #EDEDED;border-radius:8px;">
+    <div class="source-meta">
       <p>About source {{ source_id }}</p>
       <table>
 	{% for meta in metadata %}
-	<tr><td style="padding-right:1em;text-align:right;font-weight:bold;">{{ meta.name }}</td><td>{{ meta.value|truncatewords:10 }}</td></tr>
+	<tr>
+	  <th>{{ meta.name }}</th>
+  	  <td>{{ meta.value|truncatewords:10 }}</td>
+	</tr>
 	{% endfor %}
       </table>
   </div>

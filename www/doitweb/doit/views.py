@@ -5,10 +5,17 @@ from doit.dataaccess import DoitDB
 from operator import itemgetter
 from django.shortcuts import render_to_response
 from django.http import HttpResponse
+from django.utils import simplejson
 
 def source_index(req, dbname):
 	db = DoitDB(dbname)
-	return render_to_response('doit/source_index.html', {'source_list': db.sources(),})
+	return render_to_response('doit/source_index.html', {'source_list': db.sources(), 'dbname': dbname,})
+
+def source_processor(req, dbname, sid, method_index):
+	db = DoitDB(dbname)
+	method_name = db.process_source(sid, method_index)
+	r = {'method': method_name, 'source': sid, 'redirect': '/doit/' + dbname + '/' + sid + '/'}
+	return HttpResponse(simplejson.dumps(r), mimetype='application/json')
 
 
 def mapper(req, sid, dbname):
