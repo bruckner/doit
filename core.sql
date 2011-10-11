@@ -91,7 +91,7 @@ GROUP BY s.id, d.entity_id;
 	  AND f.local_name = d.name
 	  AND e.source_id = s.id
 	  AND e.local_id::int = d.entity_id
-	  AND length(d.value) < 1300
+          AND length(d.value) < 1300
 	  AND d.value IS NOT NULL;
 
   PERFORM preprocess_source(new_source_id);
@@ -141,6 +141,9 @@ $$
 BEGIN
   RAISE INFO 'Preparing qgrams global index...';
   PERFORM qgrams_preprocess_global();
+  RAISE INFO '  done.';
+  RAISE INFO 'Preparing global distributions index...';
+  PERFORM dist_preprocess_global();
   RAISE INFO '  done.';
   RAISE INFO 'Preparing MDL global dictionaries...';
   PERFORM mdl_preprocess_global();
