@@ -25,7 +25,8 @@ try:
     import stats
 except ImportError:
     # workaround for system without standard install of pystats
-    sys.path.append('/usca/home/bruckda1/pymods')
+    sys.path.append('/home/bruckda1/pymods')
+    sys.path.append('/usca_legacy/home/bruckda1/pymods')
     import stats
 
 if (n1 < 2 or n2 < 2):
