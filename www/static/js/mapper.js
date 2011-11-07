@@ -1,39 +1,54 @@
+/* layout */
+var topPane = $('.pane.top');
+var leftPane = $('.pane.left');
+var rightPane = $('.pane.right');
 
-/* match lists  */
+function setPaneHeights () {
+    var extraHeight = $(rightPane).outerHeight(true) - $(rightPane).height();
+    $(rightPane).height($(window).height() - $(topPane).outerHeight(true) - extraHeight);
+    $(leftPane).height($(rightPane).height());
+}
+
+setPaneHeights();
+$(window).resize(setPaneHeights);
+
+
+/* match menu lists  */
 var matchers = $('.mapper td.match');
-$(matchers).each( function () {
-    var openButton = $(this).children().first();
-    var list = $('ul', this);
-    $(openButton).click( function (e) {
+
+$(matchers).each(function () {
+    var openButton = $('.button', this);
+    var list = $('.map-list', this);
+    $(openButton).click(function (e) {
+        if ($(openButton).is('.disabled'))
+            return;
+ 	e.stopPropagation();
 	toggle_match_list(list);
-	e.stopPropagation();
     });
 });
 
-
 function open_match_list (mlist) {
-    var pos = $(mlist).offset();
-    $(mlist)
-	.css('top', pos.top)
-	.css('left', pos.left)
-	.css('position', 'absolute')
-	.css('height', 'auto')
-	.css('border', '1px solid #3344FF')
-	.children()
-	.css('padding', '8px 4px 0 4px')
-	.hover(
-	    function () {
-		$(this).css('background-color', '#8899FF').css('color', 'white');
-	    },
-	    function () {
-		$(this).css('background-color', 'white').css('color', 'black');
-	    })
-	.click( function (e) {
-	    $(this).detach().prependTo(mlist);
-	    close_match_list(mlist);
-	    e.stopPropagation();
-	})
-	.show();
+    if ($('.map-list-container.open').length)
+        return;
+    var container = $(mlist).closest('.map-list-container')
+    var pos = $(container).prev().offset();
+    $(container)
+        .addClass('open')
+        .css('top', pos.top - 32)
+        .css('left', pos.left + 16);
+    if (pos.top - 32 + $(container).outerHeight() > $(window).height())
+        $(container).css('top', $(window).height() - 280);
+
+    $('.candidate', mlist).click(function () {
+        $(this).addClass('selected');
+        update_mapping_choice(mlist);
+        close_match_list(mlist);
+    });
+
+    $(mlist).closest('tr').find('.button').addClass('disabled');
+
+    $(container).click(function (e) {e.stopPropagation();});
+
     $('body')
 	.click( function () {
 	    close_match_list(mlist);
@@ -41,32 +56,69 @@ function open_match_list (mlist) {
 }
 
 function close_match_list (mlist) {
-    $(mlist)
-	.click( function (mlist) {
-	    //open_match_list(mlist);
-	})
-	.children()
-	.hide()
-	.first()
-	.unbind('mouseenter')
-	.unbind('mouseleave')
-	.unbind('click')
-	.css('background-color', 'white')
-	.css('color', 'black')
-	.css('padding', '10px 4px 4px 4px')
-	.show()
-	.end()
-	.end()
-	.css('position', 'static')
-	.css('height', 'auto')
-	.css('border', 'none');
+    $(mlist).closest('.map-list-container')
+        .removeClass('open')
+        .css('top', 'auto')
+        .css('left', 'auto')
+        .closest('tr')
+            .find('.button')
+                .removeClass('disabled');
 }
 
 function toggle_match_list (mlist) {
-    if ($(mlist).css('position') === 'absolute')
+    if ($(mlist).closest('.map-list-container').is('.open'))
 	close_match_list(mlist);
     else
 	open_match_list(mlist);
+}
+
+function update_mapping_choice (mlist) {
+    var choice = $('.selected', mlist);
+    var mapping = $(choice).attr('id').split('-to-');
+    var fromId = mapping[0];
+    var toId = mapping[1];
+    var name = $(choice).text();
+    var borderColor = $(choice).css('border-left-color');
+    var title = $(choice).attr('title');
+    var target = $(choice).closest('td').find('.choice');
+    $(target)
+        .text(name)
+        .css('border-left-color', borderColor)
+        .attr('id', fromId + '-is-' + toId)
+        .attr('title', title);
+}
+
+/* match list filters */
+$('.map-list-container')
+    .find('.filter')
+    .children()
+    .focus(function () {
+        if ($(this).val() === 'Filter')
+            $(this).val('');
+    })
+    .blur(function () {
+        if ($(this).val() === '')
+            $(this).val('Filter');
+    })
+    .keyup(function () {
+        update_filter(this);
+    });
+
+function update_filter (inputEl) {
+    var patterns = $(inputEl).val().toLowerCase().split(' ');
+    var listElems = $(inputEl).closest('.map-list-container').find('.candidate');
+    if (!patterns.length)
+        $(listElems).show();
+    else
+        $(listElems)
+            .hide()
+            .filter(function () {
+                for (var i=0; i<patterns.length; i++)
+                    if ($(this).text().toLowerCase().indexOf(patterns[i]) === -1)
+                        return false;
+                return true;
+            })
+            .show();
 }
 
 
@@ -78,81 +130,88 @@ var reject_buttons = $('.reject', actions);
 var reset_buttons  = $('.reset',  actions);
 
 $(accept_buttons).each( function () {
-    var container = $(this).parent().closest('div');
+    var container = $(this).parent().closest('tr');
     $(this).click( function () {
-	$(container)
-	    .css('background', '-webkit-gradient(linear, 100% 0, 0 0, from(#AFA), to(white))')
-	    .find('li')
-	    .first()
+	$(container)			// This attribute's row (tr)
 	    .addClass('mapped')
+            .removeClass('unmapped')
+            .find('.match')		// The td with the match list
+                .find('.button')	// The match list open button
+                    .addClass('disabled')
+                .end()
+	        .find('.choice')	// The chosen match list item
+	           .addClass('new-mapping')
+	        .end()
 	    .end()
-	    .end()
-	    .find('.status')
-	    .text('mapped')
-	    .end()
-	    .find('.button')
-	    .hide()
-	    .filter('.reset, .detail')
-	    .show();
+	    .find('.status')	// The attributes status cell
+	        .text('mapped')
+	    .end();
     });
 });
 
-$(reject_buttons).each( function () {
-    var container = $(this).parent().closest('div');
+$(reject_buttons).each(function () {
+    var container = $(this).parent().closest('tr');
     $(this).click( function () {
-	var mlist = $(container).find('ul');
-	$(mlist).children()
-	    .first()
-	    .hide()
-	    .next()
-	    .show()
-	    .end()
-	    .detach()
-	    .appendTo(mlist);
+	var mlist = $(container).find('.map-list');
+	$('.selected', mlist)
+            .removeClass('selected')
+            .next()
+                .addClass('selected');
+        if (!$('.selected', mlist).length)
+            $('.candidate', mlist).first().addClass('selected');
+        update_mapping_choice(mlist);
     });
 });
 
 $(reset_buttons).each( function () {
-    var container = $(this).parent().closest('div');
+    var container = $(this).parent().closest('tr');
+    if ($(container).find('.choice.mapping').length)
+        return;
     $(this).click( function () {
 	$(container)
-	    .css('background', '-webkit-gradient(linear, 100% 0, 0 0, from(#FAA), to(white))')
-	    .find('li')
-	    .first()
-	    .removeClass('mapped')
-	    .end()
+            .removeClass('mapped')
+            .addClass('unmapped')
+            .find('.match')
+                .find('.button')
+                    .removeClass('disabled')
+                .end()
+	        .find('.choice')
+	            .removeClass('new-mapping')
+                    .removeClass('mapping')
+	        .end()
 	    .end()
 	    .find('.status')
-	    .text('unmapped')
-	    .end()
-	    .find('.button')
-	    .show()
-	    .filter('.reset')
-	    .hide();
+	        .text('unmapped')
+	    .end();
     });
 });
 
 
-/* floating control panel */
-var panel = $('.floatcontrol');
-$(panel).submit(function (e) { e.preventDefault(); });
+/* control panel */
+var saveButton = $('.button', topPane).first();
+var resetButton = $('.button', topPane).last();
 
-$('[value="Reset"]', panel).click( function () {
+$(resetButton).click(function () {
     $(reset_buttons).click();
 });
 
-$('[value="Save"]', panel).click( function () {
-    var mappings = {};
-    $('.mapped', matchers).each( function () {
-	var mapping = $(this).attr('id').split('-to-');
+$(saveButton).click(function () {
+    var n=0, mappings = {};
+    $('.new-mapping', matchers).each(function () {
+	var mapping = $(this).attr('id').split('-is-');
 	mappings[mapping[0]] = mapping[1];
+        ++n;
     });
-    $.post('./save', mappings, function (d) {
-	alert('Saved OK\n' + d);
-    });
+    if (n) {
+        $.post('./save', mappings, function (d) {
+            $('.new-mapping')
+                .removeClass('new-mapping')
+                .addClass('mapping')
+                .removeAttr('style');
+	    alert('Saved OK');
+        });
+    }
 });
-
-
 
 
 /* detailed views */

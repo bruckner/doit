@@ -3,73 +3,84 @@
 {% block title %}Attribute Mapper{% endblock title %}
 
 {% block content %}
-  <div>
-    <h2>Map Attributes for Source {{ source_id }}</h2>
+  <div class="pane top">
+    <span class="title">Map Attributes for Source {{ source_id }}</span>
+    <span class="button" type="submit">Save</span>
+    <span class="button" type="submit">Reset</span>
+  </div>
+  <div class="pane left">
     <div class="source-meta">
-      <p>About source {{ source_id }}</p>
       <table>
+        <tr><th colspan=2 class="header">About source {{ source_id }}</th></tr>
 	{% for meta in metadata %}
-	<tr>
+	<tr class="{% cycle '' 'alt' %}">
 	  <th>{{ meta.name }}</th>
-  	  <td>{{ meta.value|truncatewords:10 }}</td>
+  	  <td title="{{ meta.value }}">{{ meta.value|truncatewords:6 }}</td>
 	</tr>
 	{% endfor %}
       </table>
+    </div>
   </div>
   {% if attr_list %}
-  <div class="mapper">
+  <div class="mapper pane right">
     <table>
       <tr>
 	<th class="attr header">Attribute</th>
-	<th class="match header">Best match</th>
-	<th class="actions header" colspan=3>Actions</th>
+	<th class="match header">Mappings & Suggestions</th>
+	<th class="actions header">Actions</th>
 	<th class="status header">Status</th>
       </tr>
+      {% for attr in attr_list %}
+      <tr id="fid{{ attr.fid }}" class="{% if not attr.mapping %}un{% endif %}mapped {% cycle '' 'alt' %}">
+	<td class="attr" title='e.g. "{{ attr.example|striptags|truncatewords:6 }}"'>{{ attr.name }}</td>
+	<td class="match">
+            <table>
+              <tr>
+                <td>
+                  {% if attr.mapping %}
+                  <div class="choice mapping" id="{{ attr.fid }}-is-{{ attr.mapping.id }}">
+                    {{ attr.mapping.name }}
+                  </div>
+                  {% else %}
+                  <div class="choice" id="{{ attr.fid }}-is-{{ attr.candidates.0.id }}"
+                       title="{{ attr.candidates.0.name }} Score: {{ attr.candidates.0.score|floatformat }} out of 4.0" 
+                       style="border-left-color:#{{ attr.candidates.0.red }}{{ attr.candidates.0.green }}44;">
+                    {{ attr.candidates.0.name }}
+                  </div>
+                  {% endif %}
+                  <div class="map-list-container">
+                    <div class="filter"><input type="text" value="Filter"></input></div>
+                    <ul class="map-list">
+                      {% for cand in attr.candidates %}
+	              <li id="{{ attr.fid }}-to-{{ cand.id }}"
+                          title="{{ cand.name }} Score: {{ cand.score|floatformat }} out of 4.0" 
+                          style="border-left-color:#{{ cand.red }}{{ cand.green }}44;"
+                          class="candidate">
+	                {{ cand.name }}
+	              </li>
+	              {% endfor %}
+	            </ul>
+                  </div>
+                </td>
+                <td><div class="button{% if attr.mapping %} disabled{% endif %}">V</div></td>
+                <td></td>
+              </tr>
+            </table>
+	 </td>
+         <td class="actions">
+	  <span class="button accept">Yes</span>
+	  <span class="button reject">No</span>
+	  <span class="button reset">Reset</span>
+	  <span class="button detail">Details...</span>
+	</td>
+	<td class="status">{% if not attr.mapping %}un{% endif %}mapped</td>
+      </tr>
+      {% endfor %}
     </table>
-    {% for attr in attr_list %}
-    <div>
-      <table>
-	<tr id="fid{{ attr.fid }}">
-	  <td class="attr" title='e.g. "{{ attr.example|striptags|truncatewords:6 }}"'>{{ attr.name }}</td>
-	  <td class="match">
-	      <div class="button">V</div>
-	      <ul>
-		{% for cand in attr.candidates|slice:":5" %}
-		<li id="{{ attr.name }}-to-{{ cand.1 }}" title="{{ cand.0 }} Score: {{ cand.2|floatformat }} out of 4.0" style="border-left-color:#{{ cand.4 }}{{ cand.3 }}44;">
-		  {{ cand.0 }}
-		</li>
-		{% endfor %}
-		<li>More...</li>
-	      </ul>
-	  </td>
-	  <td class="actions">
-	    <span class="button accept">Yes</span>
-	    <span class="button reject">No</span>
-	    <span class="button reset">Reset</span>
-	    <span class="button detail">Details...</span>
-	  </td>
-	  <td class="status">unmapped</td>
-	</tr>
-      </table>
-    </div>
-    {% endfor %}
   </div>
   {% else %}
   <div>Nothing to do!</div>
   {% endif %}
-
-  {% block floatingcontrols %}
-  <form class="floatcontrol" action="" method="POST">
-    <div>
-      {% csrf_token %}
-      <input type="submit" value="Reset" />
-      <input type="text" value="Find..." style="margin-left:4em;padding:0 0.5em;width:250px;color:#B0B0B0" />
-      <input type="submit" value="Go" />
-      <input type="submit" value="Save" style="float:right;" />
-    </div>
-  </form>
-  {% endblock floatingcontrols %}
-
 
 {% endblock content %}
 

@@ -19,11 +19,17 @@
       </form>
       {% if source_list %}
       <h3>Available Sources:</h3>
-      <ul>
+      <table>
       {% for s in source_list %}
-        <li><a href="./{{ s }}/">{{ s }}</a></li>
+        <tr>
+          <td><a href="./{{ s.id }}/">{{ s.id }}</a></td>
+          <td title="{{ s.n_mapped }} out of {{ s.n_attr }} attributes mapped."
+              style="padding-left:2em;font-weight:bold;">
+           {{ s.n_mapped }} / {{ s.n_attr }}
+          </td>
+        </tr>
       {% endfor %}
-      </ul>
+      </table>
       {% else %}
         <p>No sources are available!</p>
       {% endif %}
