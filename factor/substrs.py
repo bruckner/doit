@@ -18,23 +18,44 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from django.conf.urls.defaults import *
-from django.views.generic.simple import redirect_to
+import re
 
-urlpatterns = patterns('doit.views',
-    (r'^(?P<dbname>\w+)/$', 'source_index'),
+# enumerate substrings
+def substrs(s):
+    ss = set()
+    for i in range(0, len(s)):
+        for j in range(i+1,len(s)+1):
+            ss.add(s[i:j])
+    return ss
 
-    (r'^(?P<dbname>\w+)/lowscorers/$', 'lowscoremapper'),
-    (r'^(?P<dbname>\w+)/(?P<sid>\d+)/$', 'mapper'),
-    (r'^(?P<dbname>\w+)/(?P<sid>\d+)/save$', 'mapper_results'),
+# enumerate string partitions
+def strparts(s):
+    pp = []
+    if len(s) == 0:
+        return [[]]
+    for i in range(1, len(s)+1):
+        parts = strparts(s[i:])
+        for part in parts:
+            pp.append([s[:i]] + part)
+    return pp
 
-    (r'^(?P<dbname>\w+)/(?P<sid>\d+)/(?P<fid>[^/]+)/$', redirect_to, {'url': 'summary',}),
-    (r'^(?P<dbname>\w+)/(?P<sid>\d+)/(?P<fid>[^/]+)/summary$', 'detail_summary'),
-    (r'^(?P<dbname>\w+)/(?P<sid>\d+)/(?P<fid>[^/]+)/values/$', redirect_to, {'url': 'examples',}),
-    (r'^(?P<dbname>\w+)/(?P<sid>\d+)/(?P<fid>[^/]+)/values/examples$', 'detail_examples'),
-    (r'^(?P<dbname>\w+)/(?P<sid>\d+)/(?P<fid>[^/]+)/values/shared$', 'detail_shared'),
-    (r'^(?P<dbname>\w+)/(?P<sid>\d+)/(?P<fid>[^/]+)/values/distro$', 'detail_distro'),
-    (r'^(?P<dbname>\w+)/(?P<sid>\d+)/(?P<fid>[^/]+)/scores$', 'detail_scoring'),
+# enumerate prefixes
+def prefixes(s):
+    return [s[:i] for i in range(1, len(s)+1)]
 
-    (r'^(?P<dbname>\w+)/process/(?P<sid>\d+)/(?P<method_index>[0-4])/', 'source_processor'),
-)
+# enumerate delimited substrings
+def dsubstrs(s):
+    delims = '(\W)|(_)|(.(?=[\W_]))|([a-z][A-Z])|(\d\D)|(\D\d)'
+    delimindexes = [0, len(s)]
+    for m in re.finditer(delims, s):
+        delimindexes.append(m.start()+1)
+
+    ss = set()
+    for i in delimindexes:
+        for j in delimindexes:
+            if i < j:
+                ss.add(s[i:j])
+    return ss
+
+
+print dsubstrs('hello world')
