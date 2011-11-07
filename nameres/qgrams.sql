@@ -75,6 +75,19 @@ BEGIN
 END
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION qgrams_preprocess_all () RETURNS VOID AS
+$$
+BEGIN
+  TRUNCATE local_qgrams;
+
+  INSERT INTO local_qgrams (source_id, field_id, gram, c, tf)
+       SELECT source_id, field_id, gram, COUNT(gram), ln(1+COUNT(gram))
+         FROM local_qgrams_raw
+     GROUP BY source_id, field_id, gram;
+END
+$$ LANGUAGE plpgsql;
+
+
 
 CREATE OR REPLACE FUNCTION qgrams_preprocess_global () RETURNS VOID AS
 $$
@@ -121,13 +134,24 @@ END
 $$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION qgrams_results_for_all_unmapped () RETURNS VOID AS
+$$
+BEGIN
+  INSERT INTO nr_raw_results (source_id, field_id, method_name, match_id, score)
+       SELECT source_id, field_id, 'qgrams'::TEXT, att_id, similarity
+         FROM qgrams_cosine_similarity
+        WHERE field_id NOT IN (SELECT local_id FROM attribute_mappings);
+END
+$$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION qgrams_results_for_source (INTEGER) RETURNS VOID AS
 $$
 DECLARE
   test_source_id ALIAS FOR $1;
 BEGIN
-  INSERT INTO nr_raw_results (field_id, method_name, match_id, score)
-       SELECT field_id, 'qgrams'::TEXT, att_id, similarity
+  INSERT INTO nr_raw_results (source_id, field_id, method_name, match_id, score)
+       SELECT source_id, field_id, 'qgrams'::TEXT, att_id, similarity
          FROM qgrams_cosine_similarity
         WHERE source_id = test_source_id;
 END

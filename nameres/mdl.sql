@@ -48,7 +48,7 @@ CREATE TABLE global_mdl_dictionaries (
 CREATE TABLE mdl_dict_card_by_len (
        att_id INTEGER,
        l INTEGER,
-       card INTEGER,
+       card FLOAT,
        lg_card FLOAT
 );
 
@@ -129,6 +129,41 @@ BEGIN
 END
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION mdl_preprocess_all () RETURNS VOID AS
+$$
+BEGIN
+  TRUNCATE local_mdl_dictionaries;
+  TRUNCATE mdl_input_stats;
+  TRUNCATE mdl_base_dl;
+
+  ALTER TABLE local_mdl_dictionaries DROP CONSTRAINT local_mdl_dictionaries_pkey;
+
+  INSERT INTO local_mdl_dictionaries (field_id, value, c)
+       SELECT field_id, value, COUNT(*)
+         FROM local_data
+        WHERE value IS NOT NULL
+     GROUP BY field_id, value;
+
+  ALTER TABLE local_mdl_dictionaries ADD PRIMARY KEY (value, field_id);
+
+  UPDATE local_mdl_dictionaries a
+     SET source_id = b.source_id
+    FROM local_fields b
+   WHERE a.field_id = b.id;
+
+  INSERT INTO mdl_input_stats (source_id, field_id, n, avglen, maxlen)
+       SELECT source_id, field_id, SUM(c),
+              SUM(length(value) * c)::FLOAT / SUM(c), MAX(length(value))::FLOAT
+         FROM local_mdl_dictionaries
+     GROUP BY source_id, field_id;
+
+  INSERT INTO mdl_base_dl (field_id, domain_name, dl)
+       SELECT field_id, 'STRING'::text, (1.0 * avglen * 8.0)
+         FROM mdl_input_stats;
+END
+$$ LANGUAGE plpgsql;
+
+
 
 CREATE OR REPLACE FUNCTION mdl_preprocess_global () RETURNS VOID AS
 $$
@@ -145,7 +180,20 @@ BEGIN
    GROUP BY att_id, length(value);
 
   UPDATE mdl_dict_card_by_len
-     SET lg_card = log(2, card);
+     SET lg_card = log(2, card::NUMERIC);
+END
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION mdl_results_for_all_unmapped () RETURNS VOID AS
+$$
+BEGIN
+  -- Description length normalized by base (generic string) DL, then subtracted from 1
+  INSERT INTO nr_raw_results (source_id, field_id, method_name, match_id, score)
+  SELECT a.source_id, a.field_id, 'mdl', a.att_id, GREATEST(0, 1.0 - (a.term1+a.term2+a.term3) / b.dl)
+    FROM mdl_description_length a, mdl_base_dl b
+   WHERE a.field_id = b.field_id
+     AND a.field_id NOT IN (SELECT local_id FROM attribute_mappings);
 END
 $$ LANGUAGE plpgsql;
 
@@ -156,8 +204,8 @@ DECLARE
   test_source ALIAS FOR $1;
 BEGIN
   -- Description length normalized by base (generic string) DL, then subtracted from 1
-  INSERT INTO nr_raw_results (field_id, method_name, match_id, score)
-  SELECT a.field_id, 'mdl', a.att_id, GREATEST(0, 1.0 - (a.term1+a.term2+a.term3) / b.dl)
+  INSERT INTO nr_raw_results (source_id, field_id, method_name, match_id, score)
+  SELECT a.source_id, a.field_id, 'mdl', a.att_id, GREATEST(0, 1.0 - (a.term1+a.term2+a.term3) / b.dl)
     FROM mdl_description_length a, mdl_base_dl b
    WHERE a.field_id = b.field_id
      AND a.source_id = test_source;

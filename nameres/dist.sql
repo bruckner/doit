@@ -116,6 +116,31 @@ END
 $$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION dist_preprocess_all () RETURNS VOID AS
+$$
+BEGIN
+  DROP INDEX idx_local_dist_stats_source_id;
+  DROP INDEX idx_locaL_dist_stats_field_id;
+
+  INSERT INTO local_dist_stats (field_id, n, mean, variance)
+       SELECT *
+         FROM local_dist_stats_vw;
+
+  CREATE INDEX idx_local_dist_stats_source_id ON local_dist_stats (source_id);
+  CREATE INDEX idx_local_dist_stats_field_id ON local_dist_stats (field_id);
+
+  UPDATE local_dist_stats a
+     SET source_id = b.source_id
+    FROM local_fields b
+   WHERE a.field_id = b.id;
+EXCEPTION
+  WHEN NUMERIC_VALUE_OUT_OF_RANGE THEN
+    RETURN;
+END
+$$ LANGUAGE plpgsql;
+
+
+
 CREATE OR REPLACE FUNCTION dist_preprocess_global () RETURNS VOID AS
 $$
 BEGIN
@@ -127,17 +152,29 @@ END
 $$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION dist_results_for_all_unmapped () RETURNS VOID AS
+$$
+BEGIN
+  INSERT INTO nr_raw_results (source_id, field_id, match_id, score, method_name)
+       SELECT source_id, field_id, att_id, MAX((1.0 - p) * affinity) AS "score", 'dist'
+         FROM dist_comps
+        WHERE field_id NOT IN (SELECT local_id FROM attribute_mappings)
+     GROUP BY source_id, field_id, att_id;
+END
+$$ LANGUAGE plpgsql;
+
+
 -- Compare the distribution of one source's fields against all others
 CREATE OR REPLACE FUNCTION dist_results_for_source (INTEGER) RETURNS VOID AS
 $$
 DECLARE
   test_source_id ALIAS FOR $1;
 BEGIN
-  INSERT INTO nr_raw_results (field_id, match_id, score, method_name)
-       SELECT field_id, att_id, MAX((1.0 - p) * affinity) AS "score", 'dist'
+  INSERT INTO nr_raw_results (source_id, field_id, match_id, score, method_name)
+       SELECT source_id, field_id, att_id, MAX((1.0 - p) * affinity) AS "score", 'dist'
          FROM dist_comps
         WHERE source_id = test_source_id
-     GROUP BY field_id, att_id;
+     GROUP BY source_id, field_id, att_id;
 END
 $$ LANGUAGE plpgsql;
 

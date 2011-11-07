@@ -126,6 +126,34 @@ BEGIN
 END
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION ngrams_preprocess_all () RETURNS void AS
+$$
+BEGIN
+  TRUNCATE local_ngrams;
+
+  ALTER TABLE local_ngrams DROP CONSTRAINT local_ngrams_pkey;
+  DROP INDEX idx_local_ngrams_source_id;
+
+  INSERT INTO local_ngrams (field_id, gram, c)
+       SELECT field_id, gram, COUNT(*)
+         FROM local_ngrams_raw
+     GROUP BY field_id, gram;
+
+  ALTER TABLE local_ngrams ADD PRIMARY KEY (gram, field_id);
+  CREATE INDEX idx_local_ngrams_source_id ON local_ngrams (source_id);
+
+  UPDATE local_ngrams a
+     SET source_id = b.source_id
+    FROM local_fields b
+   WHERE a.field_id = b.id;
+
+  UPDATE local_ngrams ln
+     SET tf = ln.c::FLOAT / dl.len
+    FROM local_ngrams_doc_lens dl
+   WHERE ln.field_id = dl.field_id;
+END
+$$ LANGUAGE plpgsql;
+
 
 -- Load ngrams for resolved value-sets into global ngram table
 CREATE OR REPLACE FUNCTION ngrams_preprocess_global () RETURNS void AS
@@ -197,13 +225,24 @@ END
 $$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION ngrams_results_for_all_unmapped () RETURNS VOID AS
+$$
+BEGIN
+  INSERT INTO nr_raw_results (source_id, field_id, method_name, match_id, score)
+       SELECT source_id, field_id, 'ngrams'::TEXT, att_id, similarity
+         FROM ngrams_cosine_similarity
+        WHERE field_id NOT IN (SELECT local_id FROM attribute_mappings);
+END
+$$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION ngrams_results_for_source (INTEGER) RETURNS VOID AS
 $$
 DECLARE
   test_source ALIAS FOR $1;
 BEGIN
-  INSERT INTO nr_raw_results (field_id, method_name, match_id, score)
-       SELECT field_id, 'ngrams'::TEXT, att_id, similarity
+  INSERT INTO nr_raw_results (source_id, field_id, method_name, match_id, score)
+       SELECT source_id, field_id, 'ngrams'::TEXT, att_id, similarity
          FROM ngrams_cosine_similarity
         WHERE source_id = test_source;
 END
