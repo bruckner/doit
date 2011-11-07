@@ -1,5 +1,10 @@
 -- Tables, views, and functions for name resolution
 
+-- Housekeeping
+DROP TABLE IF EXISTS nr_raw_results CASCADE;
+DROP TABLE IF EXISTS nr_ncomp_results_tbl CASCADE;
+DROP TABLE IF EXISTS nr_rwc_results;
+
 CREATE OR REPLACE FUNCTION nr_clean () RETURNS void AS
 $$
 BEGIN
@@ -11,10 +16,11 @@ $$ LANGUAGE plpgsql;
 
 -- Tables and views for results and output
 CREATE TABLE nr_raw_results (
-       field_id integer,
-       method_name text,
-       match_id integer,
-       score float
+       source_id INTEGER,
+       field_id INTEGER,
+       method_name TEXT,
+       match_id INTEGER,
+       score FLOAT
 );
 
 -- Determine top score for each field and method
@@ -66,16 +72,17 @@ CREATE VIEW nr_raw_error_rates AS
 -- ncomp: Naive composite scoring by summing over all raw results the
 -- normalized scores times the method weight.
 CREATE VIEW nr_ncomp_results AS
-     SELECT r.field_id, r.match_id, SUM((r.score * m.weight)^2) score
+     SELECT r.source_id, r.field_id, r.match_id, SUM((r.score * m.weight)^2) score
        FROM nr_raw_results r, integration_methods m
       WHERE r.method_name = m.method_name
         AND m.active = true
-   GROUP BY r.field_id, r.match_id;
+   GROUP BY r.source_id, r.field_id, r.match_id;
 
 CREATE TABLE nr_ncomp_results_tbl (
-       field_id integer,
-       match_id integer,
-       score float
+       source_id INTEGER,
+       field_id INTEGER,
+       match_id INTEGER,
+       score FLOAT
 );
 CREATE INDEX idx_nr_ncomp_results_field_id ON nr_ncomp_results_tbl (field_id, score);
 
