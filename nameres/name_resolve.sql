@@ -192,20 +192,45 @@ CREATE OR REPLACE FUNCTION nr_test (INTEGER, INTEGER) RETURNS VOID AS
 $$
 BEGIN
   RAISE INFO 'nr_test: Importing test data...';
-  CREATE TEMP TABLE test_sources_tmp AS
-  SELECT import_random AS "source_id" FROM import_random($1, $2);
+  PERFORM import_random($1, $2);
+
+  PERFORM qgrams_clean();
+  PERFORM mdl_clean();
+  PERFORM ngrams_clean();
+  PERFORM dist_clean();
+
+  PERFORM preprocess_all();
 
   RAISE INFO 'done.  Preprocessing...';
   PERFORM preprocess_global();
 
   RAISE INFO 'done.  Computing results...';
-  PERFORM nr_results_for_source(source_id) FROM test_sources_tmp;
+  PERFORM nr_results_for_all_unmapped();
 
   RAISE INFO 'done.';
-  DROP TABLE test_sources_tmp;
 END
 $$ LANGUAGE plpgsql;
 
+
+CREATE OR REPLACE FUNCTION nr_results_for_all () RETURNS VOID AS
+$$
+BEGIN
+  PERFORM qgrams_results_for_all();
+  PERFORM dist_results_for_all();
+  PERFORM mdl_results_for_all();
+  PERFORM ngrams_results_for_all();
+END
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION nr_results_for_all_unmapped () RETURNS VOID AS
+$$
+BEGIN
+  PERFORM qgrams_results_for_all_unmapped();
+  PERFORM dist_results_for_all_unmapped();
+  PERFORM mdl_results_for_all_unmapped();
+  PERFORM ngrams_results_for_all_unmapped();
+END
+$$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION nr_results_for_source (INTEGER) RETURNS VOID AS
 $$

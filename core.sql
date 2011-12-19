@@ -19,7 +19,6 @@
  * SOFTWARE.
  */
 
-
 -- Tables for local data and metadata
 CREATE TABLE local_sources (
 	id serial,
@@ -70,7 +69,6 @@ DECLARE
   local_source_id ALIAS FOR $1;
   new_source_id INT;
 BEGIN
-
   INSERT INTO local_sources (local_id) VALUES (local_source_id);
 
   new_source_id := id FROM local_sources WHERE local_id::int = local_source_id;
@@ -142,6 +140,17 @@ BEGIN
     PERFORM dist_preprocess_source($1);
     PERFORM mdl_preprocess_source($1);
     PERFORM ngrams_preprocess_source($1);
+END
+$$ LANGUAGE 'plpgsql';
+
+
+CREATE OR REPLACE FUNCTION preprocess_all () RETURNS VOID AS
+$$
+BEGIN
+    PERFORM qgrams_preprocess_all();
+    PERFORM dist_preprocess_all();
+    PERFORM mdl_preprocess_all();
+    PERFORM ngrams_preprocess_all();
 END
 $$ LANGUAGE 'plpgsql';
 

@@ -109,14 +109,12 @@ END
 $$ LANGUAGE plpgsql;
 
 
-
 CREATE OR REPLACE FUNCTION qgrams_preprocess_global () RETURNS VOID AS
 $$
 DECLARE
   doc_count INTEGER;
 BEGIN
   TRUNCATE global_qgrams;
-
   INSERT INTO global_qgrams (att_id, gram, c, tf)
        SELECT aa.global_id AS "att_id", lq.gram, SUM(lq.c * aa.affinity), ln(1+SUM(lq.c * aa.affinity))
          FROM local_qgrams lq, attribute_affinities aa
@@ -124,7 +122,6 @@ BEGIN
      GROUP BY aa.global_id, lq.gram;
 
   TRUNCATE qgrams_idf;
-
   INSERT INTO qgrams_idf (gram)
        SELECT DISTINCT gram
          FROM local_qgrams;
@@ -145,12 +142,22 @@ BEGIN
      SET idf = sqrt(ln(doc_count))
    WHERE idf IS NULL;
 
-
+  TRUNCATE local_qgrams_norms;
   INSERT INTO local_qgrams_norms
        SELECT tf.field_id, sqrt(SUM((tf.tf*idf.idf)^2)) norm
          FROM local_qgrams tf, qgrams_idf idf
         WHERE tf.gram = idf.gram
      GROUP BY tf.field_id;
+END
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION qgrams_results_for_all () RETURNS VOID AS
+$$
+BEGIN
+  INSERT INTO nr_raw_results (source_id, field_id, method_name, match_id, score)
+       SELECT source_id, field_id, 'qgrams'::TEXT, att_id, similarity
+         FROM qgrams_cosine_similarity;
 END
 $$ LANGUAGE plpgsql;
 

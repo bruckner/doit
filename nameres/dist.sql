@@ -173,6 +173,17 @@ END
 $$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION dist_results_for_all () RETURNS VOID AS
+$$
+BEGIN
+  INSERT INTO nr_raw_results (source_id, field_id, match_id, score, method_name)
+       SELECT source_id, field_id, att_id, MAX((1.0 - p) * affinity) AS "score", 'dist'
+         FROM dist_comps
+     GROUP BY source_id, field_id, att_id;
+END
+$$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION dist_results_for_all_unmapped () RETURNS VOID AS
 $$
 BEGIN

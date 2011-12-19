@@ -1,3 +1,5 @@
+{% extends "doit/pop.html" %}
+
 {% comment %}
 Copyright (c) 2011 Massachusetts Institute of Technology
 
@@ -19,17 +21,24 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 {% endcomment %}
 
-{% extends "doit/pop.html" %}
-
 {% block navlink-values %}<span class="link-here">Values</span>{% endblock navlink-values %}
 
 {% block content %}
 <div>
 
   <div style="margin:1em;">
-    {% block subnav-egs %}<a href="./{{ fid }}/values/examples" onclick="fill_popover(this.href, 800); return false;">Example Values</a>{% endblock subnav-egs %} |
-    {% block subnav-shared %}<a href="./{{ fid }}/values/shared" onclick="fill_popover(this.href, 800); return false;">Shared Values</a>{% endblock subnav-shared %} |
-    {% block subnav-distro %}<a href="./{{ fid }}/values/distro" onclick="fill_popover(this.href, 800); return false;">Distributions</a>{% endblock subnav-distro %}
+    {% block subnav-egs %}
+    <a href="/doit/{{ db }}/fields/{{ fid }}/values/examples"
+       onclick="fill_popover(this.href, 800); return false;">Example Values</a>
+    {% endblock subnav-egs %} |
+    {% block subnav-shared %}
+    <a href="/doit/{{ db }}/fields/{{ fid }}/values/shared" 
+       onclick="fill_popover(this.href, 800); return false;">Shared Values</a>
+    {% endblock subnav-shared %} |
+    {% block subnav-distro %}
+    <a href="/doit/{{ db }}/fields/{{ fid }}/values/distro" 
+       onclick="fill_popover(this.href, 800); return false;">Distributions</a>
+    {% endblock subnav-distro %}
   </div>
 
   {% block info %}{% endblock info %}

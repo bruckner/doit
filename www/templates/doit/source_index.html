@@ -1,3 +1,5 @@
+{% extends "doit/base.html" %}
+
 {% comment %}
 Copyright (c) 2011 Massachusetts Institute of Technology
 
@@ -19,14 +21,12 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 {% endcomment %}
 
-{% extends "doit/base.html" %}
-
 {% block title %}Data Source Index{% endblock %}
 
 {% block content %}
     <div style="margin:0 auto;width:800px;">
       <!--<a href="./lowscorers/">Lowest scoring attributes</a>-->
-      <form id="process-source-form" action="/doit/{{ dbname }}/process/">
+      <form id="process-source-form" action="/doit/{{ dbname }}/sources/">
         <fieldset>
           <legend>Process a new source</legend>
           <div>
@@ -38,12 +38,21 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
           <div>Status: <span class="status"></span></div>
         </fieldset>
       </form>
+      <h3>Search by field name</h3>
+      <form id="field-search-form" action="/doit/{{ dbname }}/fields/">
+        <fieldset>
+          <legend>Enter field name here</legend>
+          <input type="text"></input>
+          <input type="checkbox">Exact match?</input>
+          <input type="submit" value="Go"></input>
+        </fieldset>
+      </form>
       {% if source_list %}
       <h3>Available Sources:</h3>
       <table>
       {% for s in source_list %}
         <tr>
-          <td><a href="./{{ s.id }}/">{{ s.id }}</a></td>
+          <td><a href="./sources/{{ s.id }}/map">{% if s.name %}{{ s.name }} ({{ s.id }}){% else %}{{ s.id }}{% endif %}</a></td>
           <td title="{{ s.n_mapped }} out of {{ s.n_attr }} attributes mapped."
               style="padding-left:2em;font-weight:bold;">
            {{ s.n_mapped }} / {{ s.n_attr }}
@@ -57,4 +66,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     </div>
 {% endblock content %}
 
-{% block jquery %}<script type="text/javascript" src="/static/js/jquery.sourceProcessor.js"></script>{% endblock jquery %}
+{% block jquery %}
+  <script type="text/javascript" src="/static/js/jquery.sourceProcessor.js"></script>
+  <script type="text/javascript" src="/static/js/jquery.fieldSearchForm.js"></script>
+{% endblock jquery %}

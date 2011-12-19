@@ -219,6 +219,18 @@ END
 $$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION mdl_results_for_all () RETURNS VOID AS
+$$
+BEGIN
+  -- Description length normalized by base (generic string) DL, then subtracted from 1
+  INSERT INTO nr_raw_results (source_id, field_id, method_name, match_id, score)
+  SELECT a.source_id, a.field_id, 'mdl', a.att_id, GREATEST(0, 1.0 - (a.term1+a.term2+a.term3) / b.dl)
+    FROM mdl_description_length a, mdl_base_dl b
+   WHERE a.field_id = b.field_id;
+END
+$$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION mdl_results_for_source (INTEGER) RETURNS VOID AS
 $$
 DECLARE

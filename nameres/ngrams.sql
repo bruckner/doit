@@ -246,6 +246,16 @@ END
 $$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION ngrams_results_for_all () RETURNS VOID AS
+$$
+BEGIN
+  INSERT INTO nr_raw_results (source_id, field_id, method_name, match_id, score)
+       SELECT source_id, field_id, 'ngrams'::TEXT, att_id, similarity
+         FROM ngrams_cosine_similarity;
+END
+$$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION ngrams_results_for_all_unmapped () RETURNS VOID AS
 $$
 BEGIN

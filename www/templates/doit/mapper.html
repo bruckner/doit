@@ -1,3 +1,5 @@
+{% extends "doit/base.html" %}
+
 {% comment %}
 Copyright (c) 2011 Massachusetts Institute of Technology
 
@@ -19,21 +21,20 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 {% endcomment %}
 
-{% extends "doit/base.html" %}
-
 {% block title %}Attribute Mapper{% endblock title %}
 
 {% block content %}
   <div class="pane top">
-    <span class="title">Map Attributes for Source {{ source_id }}</span>
-    <span class="button" type="submit">Save</span>
-    <span class="button" type="submit">Reset</span>
+    <span class="title">Map Attributes for {{ meta.category }}</span>
+    <span class="button">Save</span>
+    <span class="button">Reset</span>
+    <span class="button">Wrangle</span>
   </div>
   <div class="pane left">
     <div class="source-meta">
       <table>
-        <tr><th colspan=2 class="header">About source {{ source_id }}</th></tr>
-	{% for meta in metadata %}
+        <tr><th colspan=2 class="header">About {{ meta.category }}</th></tr>
+	{% for meta in meta.data %}
 	<tr class="{% cycle '' 'alt' %}">
 	  <th>{{ meta.name }}</th>
   	  <td title="{{ meta.value }}">{{ meta.value|truncatewords:6 }}</td>
@@ -52,38 +53,29 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	<th class="status header">Status</th>
       </tr>
       {% for attr in attr_list %}
-      <tr id="fid{{ attr.fid }}" class="{% if not attr.mapping %}un{% endif %}mapped {% cycle '' 'alt' %}">
+      <tr id="fid{{ attr.id }}" class="{% if not attr.match.is_mapping %}un{% endif %}mapped {% cycle '' 'alt' %}">
 	<td class="attr" title='e.g. "{{ attr.example|striptags|truncatewords:6 }}"'>{{ attr.name }}</td>
 	<td class="match">
             <table>
               <tr>
                 <td>
-                  {% if attr.mapping %}
-                  <div class="choice mapping" id="{{ attr.fid }}-is-{{ attr.mapping.id }}">
-                    {{ attr.mapping.name }}
+                  {% if attr.match.is_mapping %}
+                  <div class="choice mapping" id="{{ attr.id }}-is-{{ attr.match.id }}">
+                    {{ attr.match.name }}
                   </div>
                   {% else %}
-                  <div class="choice" id="{{ attr.fid }}-is-{{ attr.candidates.0.id }}"
-                       title="{{ attr.candidates.0.name }} Score: {{ attr.candidates.0.score|floatformat }} out of 4.0" 
-                       style="border-left-color:#{{ attr.candidates.0.red }}{{ attr.candidates.0.green }}44;">
-                    {{ attr.candidates.0.name }}
+                  <div class="choice" id="{{ attr.id }}-is-{{ attr.match.id }}"
+                       title="{{ attr.match.name }} Score: {{ attr.match.score|floatformat }} out of 4.0" 
+                       style="border-left-color:#{{ attr.match.red }}{{ attr.match.green }}44;">
+                    {{ attr.match.name }}
                   </div>
                   {% endif %}
                   <div class="map-list-container">
                     <div class="filter"><input type="text" value="Filter"></input></div>
-                    <ul class="map-list">
-                      {% for cand in attr.candidates %}
-	              <li id="{{ attr.fid }}-to-{{ cand.id }}"
-                          title="{{ cand.name }} Score: {{ cand.score|floatformat }} out of 4.0" 
-                          style="border-left-color:#{{ cand.red }}{{ cand.green }}44;"
-                          class="candidate">
-	                {{ cand.name }}
-	              </li>
-	              {% endfor %}
-	            </ul>
+                    <ul class="map-list"></ul>
                   </div>
                 </td>
-                <td><div class="button{% if attr.mapping %} disabled{% endif %}">V</div></td>
+                <td><div class="button{% if attr.match.is_mapping %} disabled{% endif %}">V</div></td>
                 <td></td>
               </tr>
             </table>
@@ -94,7 +86,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	  <span class="button reset">Reset</span>
 	  <span class="button detail">Details...</span>
 	</td>
-	<td class="status">{% if not attr.mapping %}un{% endif %}mapped</td>
+        {% if not attr.match.is_mapping %}
+ 	<td class="status">unmapped</td>
+        {% else %}
+        <td class="status" title="Mapped by {{ attr.match.who_mapped }}">mapped</td>
+        {% endif %}
       </tr>
       {% endfor %}
     </table>

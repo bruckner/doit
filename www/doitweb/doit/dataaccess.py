@@ -1,24 +1,6 @@
-# Copyright (c) 2011 Massachusetts Institute of Technology
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to
-# deal in the Software without restriction, including without limitation the
-# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
-# sell copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-
 import psycopg2
+import copy
+import cPickle
 from operator import itemgetter
 
 # convert float (0 to 1) to 8 bit web color (e.g. 00 to ff)
@@ -32,6 +14,11 @@ def f2c(x):
 		c = '0' + c
 	return c
 
+# Faster than copy.deepcopy, but totally hacky:
+# http://stackoverflow.com/questions/1410615/copy-deepcopy-vs-pickle
+def copyhack(obj):
+    return cPickle.loads(cPickle.dumps(obj, -1))
+
 
 class DoitDB:
     conn = None
@@ -43,18 +30,22 @@ class DoitDB:
 
     def sources(self):
         cur = self.conn.cursor()
-        cmd = '''SELECT lf.source_id, COUNT(*) AS total, COUNT(am.global_id) mapped,
-                        COUNT(am.global_id)::FLOAT / COUNT(*) AS ratio
-                   FROM local_fields lf LEFT JOIN attribute_mappings am
+        cmd = '''SELECT lf.source_id, lsm.value AS "name", COUNT(*) AS "total",
+                        COUNT(am.global_id) AS "mapped",
+                        COUNT(am.global_id)::FLOAT / COUNT(*) AS "ratio"
+                   FROM local_fields lf 
+              LEFT JOIN local_source_meta lsm
+                     ON lf.source_id = lsm.source_id
+              LEFT JOIN attribute_mappings am
                      ON lf.id = am.local_id 
-                  WHERE lf.id IN (SELECT field_id FROM nr_raw_results)
-               GROUP BY lf.source_id
+                  WHERE upper(lsm.meta_name) = 'NAME'
+               GROUP BY lf.source_id, lsm.value
                ORDER BY COUNT(*) - COUNT(am.global_id) DESC, total DESC;'''
         cur.execute(cmd)
         source_list = []
         for s in cur.fetchall():
-            source_list.append({'id': s[0], 'n_attr': s[1], 
-                                'n_mapped': s[2]})
+            source_list.append({'id': s[0], 'name': s[1], 'n_attr': s[2],
+                                'n_mapped': s[3]})
         cur.close()
         return source_list
 
@@ -117,39 +108,100 @@ class DoitDB:
 	self.conn.commit()
 	return str([cmd, params])
 
-    def field_mappings(self, source_id):
+    def global_attributes(self):
         cur = self.conn.cursor()
-        cmd = 'SELECT ama.local_id, lf.local_name, ama.global_id, ga.name ' \
-              '  FROM local_fields lf, attribute_max_affinities ama, ' \
-              '       global_attributes ga ' \
-              ' WHERE lf.id = ama.local_id ' \
-              '   AND ama.global_id = ga.id ' \
-              '   AND lf.source_id = %s'
-        cur.execute(cmd, (source_id,))
+        cmd = '''SELECT id, name FROM global_attributes;'''
+        cur.execute(cmd)
+        global_attrs = dict()
+        for rec in cur.fetchall():
+            global_attrs[rec[0]] = {'id': rec[0], 'name': rec[1]}
+        return global_attrs
+
+    def field_candidates(self, field_id):
+        cur = self.conn.cursor()
+        candidates = self.global_attributes()
+        for id in candidates:
+            candidates[id].setdefault('score', 0.0)
+            candidates[id].setdefault('green', f2c(0.0))
+            candidates[id].setdefault('red', f2c(0.0))
+        cmd = '''SELECT match_id, score FROM nr_ncomp_results_tbl
+                  WHERE field_id = %s;'''
+        cur.execute(cmd, (field_id,))
+        for rec in cur.fetchall():
+            candidates[rec[0]]['score'] = rec[1]
+            candidates[rec[0]]['green'] = f2c(rec[1] / 2.0)
+            candidates[rec[0]]['red'] = f2c(1.0 - rec[1] / 3.0)
+        return sorted(candidates.values(), key=itemgetter('score'), reverse=True)
+
+    def field_mappings_by_source(self, source_id):
+        cur = self.conn.cursor()
         fields = dict()
-        for rec in cur.fetchall():
-            fields.setdefault(rec[0], dict())
-            fields[rec[0]]['id'] = rec[0]
-            fields[rec[0]]['name'] = rec[1]
-            fields[rec[0]]['mapping'] = {'id': rec[2], 'name': rec[3]}
-            fields[rec[0]].setdefault('matches', [])
-        cmd = 'SELECT lf.id, lf.local_name, nnr.match_id, ga.name as match, ' \
-              '       nnr.score ' \
-              '  FROM nr_ncomp_results_tbl nnr, local_fields lf, ' \
-              '       global_attributes ga ' \
-              ' WHERE nnr.match_id = ga.id  AND nnr.field_id = lf.id ' \
-              '   AND nnr.source_id = %s ' \
-              'ORDER BY score desc;'
+        cmd = '''SELECT ama.local_id, lf.local_name, ama.global_id, ga.name,
+                        ama.who_created
+                   FROM local_fields lf, attribute_mappings ama,
+                        global_attributes ga
+                  WHERE lf.id = ama.local_id
+                    AND ama.global_id = ga.id
+                    AND lf.source_id = %s;'''
         cur.execute(cmd, (source_id,))
         for rec in cur.fetchall():
             fields.setdefault(rec[0], dict())
             fields[rec[0]]['id'] = rec[0]
             fields[rec[0]]['name'] = rec[1]
-            fields[rec[0]].setdefault('mapping', None)
-            fields[rec[0]].setdefault('matches', [])
-            fields[rec[0]]['matches'].append({
-                'id': rec[2], 'name': rec[3], 'score': rec[4],
-                'green': f2c(rec[4]/2.0), 'red': f2c(1.0 - rec[4] / 3.0)})
+            fields[rec[0]]['match'] = {
+                'id': rec[2], 'name': rec[3], 'who_mapped': rec[4],
+                'is_mapping': True}
+        cmd = '''SELECT lf.id, lf.local_name, nnr.match_id, ga.name, nnr.score
+                   FROM nr_ncomp_results_tbl nnr, local_fields lf,
+                        global_attributes ga
+                  WHERE nnr.field_id = lf.id
+                    AND nnr.source_id = %s
+                    AND nnr.match_id = ga.id
+               ORDER BY score desc;'''
+        cur.execute(cmd, (source_id,))
+        for rec in cur.fetchall():
+            if rec[0] not in fields:
+                fields[rec[0]] = {'id': rec[0], 'name': rec[1], 'match': {
+                    'id': rec[2], 'name': rec[3], 'score': rec[4],
+                    'green': f2c(rec[4] / 2.0), 'red':f2c(1.0 - rec[4] / 3.0)}}
+        return fields
+
+    def field_mappings_by_name(self, field_name, exact_match=False, n=100):
+        cur = self.conn.cursor()
+        fields = dict()
+        pattern = field_name
+        if not exact_match:
+            pattern = '%' + pattern + '%'
+        cmd = '''SELECT ama.local_id, lf.local_name, ama.global_id, ga.name,
+                        ama.who_created
+                   FROM local_fields lf, attribute_mappings ama,
+                        global_attributes ga
+                  WHERE lf.id = ama.local_id
+                    AND ama.global_id = ga.id
+                    AND lower(lf.local_name) LIKE %s
+                  LIMIT %s;'''
+        cur.execute(cmd, (pattern, n / 10,))
+        for rec in cur.fetchall():
+            fields.setdefault(rec[0], dict())
+            fields[rec[0]]['id'] = rec[0]
+            fields[rec[0]]['name'] = rec[1]
+            fields[rec[0]]['match'] = {
+                'id': rec[2], 'name': rec[3], 'who_mapped': rec[4],
+                'is_mapping': True}
+        cmd = '''SELECT lf.id, lf.local_name, nnr.match_id, ga.name, nnr.score
+                   FROM nr_ncomp_results_tbl nnr, local_fields lf,
+                        global_attributes ga
+                  WHERE nnr.field_id = lf.id
+                    AND lower(lf.local_name) LIKE %s
+                    AND nnr.match_id = ga.id
+               ORDER BY score desc
+                  LIMIT %s;'''
+        cur.execute(cmd, (pattern, n,))
+        for rec in cur.fetchall():
+            if rec[0] not in fields:
+                fields[rec[0]] = {'id': rec[0], 'name': rec[1], 'match': {
+                    'id': rec[2], 'name': rec[3], 'score': rec[4],
+                    'green': f2c(rec[4] / 2.0), 'red':f2c(1.0 - rec[4] / 3.0)}}
         return fields
 
     def lowscorers(self, n):

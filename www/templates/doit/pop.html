@@ -21,10 +21,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 {% block navlinks %}
 <div>
-  {% block navlink-summary %}<a href="./{{ fid }}/summary" onclick="fill_popover(this.href, 600); return false;">Summary</a>{% endblock navlink-summary %} |
-  {% block navlink-scores %}<a href="./{{ fid }}/scores" onclick="fill_popover(this.href, 800); return false;">Scoring Breakdown</a>{% endblock navlink-scores %} |
-  {% block navlink-values %}<a href="./{{ fid }}/values/examples" onclick="fill_popover(this.href, 800); return false;">Values</a>{% endblock navlink-values %} |
-  {% block navlink-history %}<a href="" onclick="return false;">History</a>{% endblock navlink-history %}
+  {% block navlink-summary %}
+  <a href="/doit/{{ db }}/fields/{{ fid }}/summary" 
+     onclick="fill_popover(this.href, 600); return false;">Summary</a>
+  {% endblock navlink-summary %} |
+  {% block navlink-scores %}
+  <a href="/doit/{{ db }}/fields/{{ fid }}/scores" 
+     onclick="fill_popover(this.href, 800); return false;">Scoring Breakdown</a>
+  {% endblock navlink-scores %} |
+  {% block navlink-values %}
+  <a href="/doit/{{ db }}/fields/{{ fid }}/values/examples"
+     onclick="fill_popover(this.href, 800); return false;">Values</a>
+  {% endblock navlink-values %} |
+  {% block navlink-history %}
+  <a href="" 
+     onclick="return false;">History</a>
+  {% endblock navlink-history %}
 </div>
 {% endblock navlinks %}
 

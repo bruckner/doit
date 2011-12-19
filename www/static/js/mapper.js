@@ -1,23 +1,5 @@
-/* Copyright (c) 2011 Massachusetts Institute of Technology
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to
- * deal in the Software without restriction, including without limitation the
- * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
- * sell copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
+var rPath = /^\/doit\/\w+\//;
+var basePath = rPath.exec(location.pathname).toString();
 
 /* layout */
 var topPane = $('.pane.top');
@@ -48,28 +30,43 @@ $(matchers).each(function () {
     });
 });
 
+function get_match_list(mlist, field_id) {
+    var url = basePath + 'fields/' + field_id + '/candidates/';
+    var data = {};
+    var callback = function (responseText) {
+        $(mlist).html(responseText);
+        init_match_list(mlist);
+    };
+    $(mlist).html('<p>Loading...</p>');
+    $.get(url, data, callback);
+}
+
+function init_match_list(mlist) {
+    var container = $(mlist).closest('.map-list-container');
+    var pos = $(container).prev().offset();
+    if (pos.top - 32 + $(container).outerHeight() > $(window).height())
+        $(container).css('top', $(window).height() - 280);
+
+    $('.candidate', mlist).click(function () {
+        $('.selected').removeClass('selected');
+        $(this).addClass('selected');
+        update_mapping_choice(mlist);
+        close_match_list(mlist);
+    });
+}
+
 function open_match_list (mlist) {
     if ($('.map-list-container.open').length)
         return;
-    var container = $(mlist).closest('.map-list-container')
+    var container = $(mlist).closest('.map-list-container');
     var pos = $(container).prev().offset();
     $(container)
         .addClass('open')
         .css('top', pos.top - 32)
         .css('left', pos.left + 16);
-    if (pos.top - 32 + $(container).outerHeight() > $(window).height())
-        $(container).css('top', $(window).height() - 280);
-
-    $('.candidate', mlist).click(function () {
-        $(this).addClass('selected');
-        update_mapping_choice(mlist);
-        close_match_list(mlist);
-    });
 
     $(mlist).closest('tr').find('.button').addClass('disabled');
-
     $(container).click(function (e) {e.stopPropagation();});
-
     $('body')
 	.click( function () {
 	    close_match_list(mlist);
@@ -87,6 +84,11 @@ function close_match_list (mlist) {
 }
 
 function toggle_match_list (mlist) {
+    if (!$(mlist).children().length) {
+        var field_id = $(mlist).closest('td').find('.choice')
+                           .attr('id').split('-is-')[0];
+        get_match_list(mlist, field_id);
+    }
     if ($(mlist).closest('.map-list-container').is('.open'))
 	close_match_list(mlist);
     else
@@ -224,7 +226,7 @@ $(saveButton).click(function () {
         ++n;
     });
     if (n) {
-        $.post('./save', mappings, function (d) {
+        $.post(basePath + 'save', mappings, function (d) {
             $('.new-mapping')
                 .removeClass('new-mapping')
                 .addClass('mapping')
@@ -242,7 +244,7 @@ $(detail_buttons).each( function () {
 //    var attr_name = encodeURIComponent($(this).closest('tr').children().first().text());
     var fid = $(this).closest('tr').attr('id').slice(3);
     $(this).click( function () {
-	fill_popover('./' + fid + '/summary', 600);
+	fill_popover(basePath + 'fields/' + fid + '/summary', 600);
     });
 });
 
