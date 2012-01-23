@@ -50,20 +50,25 @@ SELECT source_id
 
 
 -- Aggregate function for string concatenation
-CREATE OR REPLACE FUNCTION agg_concat (agg_str text, delim text, new_str text)
+CREATE OR REPLACE FUNCTION agg_concat (agg_str TEXT, new_str TEXT, delim TEXT)
        RETURNS TEXT
 AS $$
 BEGIN
-	IF new_str IS NULL THEN
-	   RETURN agg_str;
-	ELSE
-	   RETURN agg_str || delim || new_str;
-	END IF;
+  IF new_str IS NULL THEN
+    RETURN agg_str;
+  END IF;
+
+  IF agg_str = '' THEN
+    RETURN new_str;
+  ELSE
+    RAISE INFO 'agg="%"  new="%" del="%"', agg_str, new_str, delim;
+    RETURN agg_str || delim || new_str;
+  END IF;
 END
 $$ LANGUAGE plpgsql;
 
-DROP AGGREGATE IF EXISTS group_concat (text, text) CASCADE;
-CREATE AGGREGATE group_concat (text, text) (
+DROP AGGREGATE IF EXISTS group_concat (TEXT, TEXT) CASCADE;
+CREATE AGGREGATE group_concat (TEXT, TEXT) (
        stype = text,
        sfunc = agg_concat,
        initcond = ''
