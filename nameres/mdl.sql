@@ -130,7 +130,7 @@ DECLARE
   new_source_id ALIAS FOR $2;
 BEGIN
   INSERT INTO local_mdl_dictionaries (source_id, field_id, value, c)
-       SELECT new_source_id, field_id, LEFT(value, 4095), COUNT(*)
+       SELECT new_source_id, field_id, SUBSTRING(value FOR 4095), COUNT(*)
          FROM local_data
 	WHERE field_id = new_field_id
 	  AND value IS NOT NULL
@@ -160,7 +160,7 @@ BEGIN
   ALTER TABLE local_mdl_dictionaries DROP CONSTRAINT local_mdl_dictionaries_pkey;
 
   INSERT INTO local_mdl_dictionaries (field_id, value, c)
-       SELECT field_id, LEFT(value, 4095), COUNT(*)
+       SELECT field_id, SUBSTRING(value FOR 4095), COUNT(*)
          FROM local_data
         WHERE value IS NOT NULL
      GROUP BY field_id, value;
