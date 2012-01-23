@@ -61,7 +61,6 @@ BEGIN
   IF agg_str = '' THEN
     RETURN new_str;
   ELSE
-    RAISE INFO 'agg="%"  new="%" del="%"', agg_str, new_str, delim;
     RETURN agg_str || delim || new_str;
   END IF;
 END
