@@ -25,10 +25,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 {% block content %}
   <div class="pane top">
-    <span class="title">Map Attributes for {{ meta.category }}</span>
-    <span class="button">Save</span>
-    <span class="button">Reset</span>
-    <span class="button">Wrangle</span>
+    <table style="width:100%;">
+      <tr>
+        <td class="title">Map Attributes for {{ meta.category }}</td>
+        <td class="controls">
+          <span class="control viewTable-button">View Table</span>
+          <span class="control mapall">Accept All</span>
+          <span class="control reset">Reset</span>
+          <!--<span class="button">Wrangle</span>-->
+          <span class="control save">Save</span>
+        </td>
+      </tr>
+    </table>
   </div>
   <div class="pane left">
     <div class="source-meta">
@@ -44,8 +52,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     </div>
   </div>
   {% if attr_list %}
-  <div class="mapper pane right">
-    <table>
+  <div class="pane right">
+    <table class="mapper">
       <tr>
 	<th class="attr header">Attribute</th>
 	<th class="match header">Mappings & Suggestions</th>
@@ -103,6 +111,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 {% block jquery %}
   <script type="text/javascript" src="/static/js/mapper.js"></script>
+  <script type="text/javascript" src="/static/js/viewTable.js"></script>
+  <script type="text/javascript">
+    viewTable.init({{ source_id }});
+  </script>
 {% endblock jquery %}
 
 

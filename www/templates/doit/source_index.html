@@ -25,7 +25,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 {% block content %}
     <div style="margin:0 auto;width:800px;">
-      <!--<a href="./lowscorers/">Lowest scoring attributes</a>-->
       <form id="process-source-form" action="/doit/{{ dbname }}/sources/">
         <fieldset>
           <legend>Process a new source</legend>
@@ -48,18 +47,45 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         </fieldset>
       </form>
       {% if source_list %}
-      <h3>Available Sources:</h3>
-      <table>
-      {% for s in source_list %}
-        <tr>
-          <td><a href="./sources/{{ s.id }}/map">{% if s.name %}{{ s.name }} ({{ s.id }}){% else %}{{ s.id }}{% endif %}</a></td>
-          <td title="{{ s.n_mapped }} out of {{ s.n_attr }} attributes mapped."
-              style="padding-left:2em;font-weight:bold;">
-           {{ s.n_mapped }} / {{ s.n_attr }}
-          </td>
-        </tr>
-      {% endfor %}
-      </table>
+      <div class="sourceList">
+        <table class="sourceList-nav">
+          <tr>
+            <td>View:</td>
+            <td class="viewControls">
+              <span class="integrated">Integrated</span>
+              <span class="processed">Processed</span>
+              <span class="all">All</span>
+            </td>
+            <td>
+              <input type="text" value="Find" class="textFilter-input"></input>
+            </td>
+          </tr>
+        </table>
+        <table class="sourceList-header">
+          <tr class="">
+            <td class="id">ID</td>
+            <td class="name">Name</td>
+            <td class="rows">Rows</td>
+            <td class="cols">Columns (mapped)</td>
+            <td class="vals">Non-empty Cells</td>
+          </tr>
+        </table>
+        <div class="sourceList-sources">
+          <table>
+            {% for s in source_list %}
+            <tr class="textFilter-target {% cycle '' 'alt' %}{% if s.n_attr == s.n_mapped %} integrated{% endif %}">
+              <td class="id textFilter-match">{{ s.id }}</td>
+              <td class="name textFilter-match">
+                <a href="./sources/{{ s.id }}/map">{% if s.name %}{{ s.name }}{% else %}A source with no name{% endif %}</a>
+              </td>
+              <td class="rows">{{ s.n_entities }}</td>
+              <td class="cols">{{ s.n_attr }} ({{ s.n_mapped }})</td>
+              <td class="vals">{{ s.n_val }}</td>
+            </tr>
+            {% endfor %}
+          </table>
+        </div>
+      </div>
       {% else %}
         <p>No sources are available!</p>
       {% endif %}
@@ -69,4 +95,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 {% block jquery %}
   <script type="text/javascript" src="/static/js/jquery.sourceProcessor.js"></script>
   <script type="text/javascript" src="/static/js/jquery.fieldSearchForm.js"></script>
+  <script type="text/javascript" src="/static/js/jquery.textFilter.js"></script>
+  <script type="text/javascript" src="/static/js/sourceIndex.js"></script>
 {% endblock jquery %}
