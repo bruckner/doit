@@ -23,25 +23,45 @@ body {margin:0;padding:0;font-family:'lucida grande',tahoma,verdana,arial,sans-s
 
 #content {}
 
-.dimmer {position:fixed;top:0;left:0;width:100%;height:100%;background-color:black;opacity:0.2;}
-.popover {position:absolute;margin-bottom:40px;padding:12px;width:600px;min-height:200px;background-color:white;border-radius:12px;}
+.dimmer {position:fixed;top:0;left:0;width:100%;height:100%;background-color:#F8F8F8;opacity:0.8;}
+.popover {position:absolute;margin-bottom:40px;padding:12px;width:600px;min-height:200px;background-color:white;}
 
 .pane {padding:10px;overflow:auto;background-color:#EFEFEF;border:1px solid #BBBBBB;}
-.pane.top {clear:both;padding:16px 32px;}
-.pane.left {float:left;width:308px;}
-.pane.right {}
+.pane.top {clear:both;padding:10px;font-size:12pt;}
+.pane.left {float:left;width:268px;}
+.pane.right {padding:0;}
+
+.textFilter-hidden {display:none;}
+.sourceFilter-hidden {display:none;}
+
+.sourceList {margin:50px auto;width:650px;}
+.sourceList table {width:100%;border-collapse:collapse;}
+.sourceList td {padding:4px;}
+.sourceList-nav {height:40px;font-size:12pt;color:white;background-color:#606060;}
+.sourceList-nav span {padding:4px;cursor:pointer;}
+.sourceList-nav span:hover {color:black;background-color:white;}
+.sourceList-nav input {padding:2px 8px;float:right;color:#444444;border:1px solid #ABABAB;border-radius:12px;}
+.sourceList-header {color:white;background-color:#606060;}
+.sourceList-header td {text-align:center;}
+.sourceList-sources {height:400px;overflow:auto}
+.sourceList-sources .alt {background-color:#EDEDED;}
+.sourceList td.id {width:40px;}
+.sourceList td.name {width:200px;}
+.sourceList td.rows {width:120px;}
+.sourceList td.cols {width:120px;}
+.sourceList td.vals {width:120px;}
 
 .source-meta table {margin:0;width:100%;border-collapse:collapse;}
 .source-meta tr.alt {background-color:white;}
 .source-meta th {padding:4px;text-align:left;}
 .source-meta td {padding:4px;}
 
-.title {padding:0 32px;font-size:24pt;}
+.title {padding:0;width:268px;}
+.controls {text-align:center;}
 
 .pane .header {padding:4px;height:22px;text-align:left;font-weight:bold;color:#FFFFFF;background-color:#627AAD;border-bottom:1px solid #EFEFEF;}
 
-.mapper {}
-.mapper table {width:100%;background-color:#EFEFEF;border-collapse:collapse;}
+.mapper {margin:10px;width:100%;background-color:#EFEFEF;border-collapse:collapse;}
 .mapper tr.alt {}
 .mapper td {text-align:center;}
 .mapper .attr {padding-right:8px;width:200px;font-weight:bold;}
@@ -65,11 +85,13 @@ body {margin:0;padding:0;font-family:'lucida grande',tahoma,verdana,arial,sans-s
 .mapper .actions {width:200px;}
 .mapper .status {margin:2px 8px;padding:4px;width:70px;}
 
+.control {padding:8px 16px;font-style:normal;color:black;cursor:pointer;}
+.control:hover {color:white;background-color:#627AAD;}
+
 .button {padding:8px 16px;font-style:normal;color:white;cursor:pointer;background-color:#627AAD;}
 .button:hover {color:#627AAD;background-color:#EFEFEF;}
 .disabled.button {background-color:#DDDDDD;}
 .disabled.button:hover {cursor:auto;color:white;}
-
 
 
 .mapped td.match {}
@@ -100,3 +122,15 @@ body {margin:0;padding:0;font-family:'lucida grande',tahoma,verdana,arial,sans-s
 .histo-line {stroke:steelblue;stroke-width:2;fill:none;}
 .histo-axis {stroke:black;stroke-width:1;fill:none;}
 .histo-label {stroke:none;fill:black;}
+
+.viewTable {margin:0;padding:0;}
+.viewTable table {border-collapse:collapse;}
+.viewTable td {padding:4px;border:1px solid #ABABAB;}
+.viewTable .row-label {text-align:center;font-weight:bold;}
+.viewTable .col-label {padding:8px;text-align:center;font-weight:bold;}
+.viewTable .blankCell {}
+.viewTable .data {min-width:108px;background-color:white;}
+
+
+
+

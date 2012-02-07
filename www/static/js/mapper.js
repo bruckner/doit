@@ -2,19 +2,27 @@ var rPath = /^\/doit\/\w+\//;
 var basePath = rPath.exec(location.pathname).toString();
 
 /* layout */
-var topPane = $('.pane.top');
-var leftPane = $('.pane.left');
-var rightPane = $('.pane.right');
+var topPane = $('.pane.top'),
+    leftPane = $('.pane.left'),
+    rightPane = $('.pane.right');
 
 function setPaneHeights () {
-    var extraHeight = $(rightPane).outerHeight(true) - $(rightPane).height();
-    $(rightPane).height($(window).height() - $(topPane).outerHeight(true) - extraHeight);
-    $(leftPane).height($(rightPane).height());
+    var rightExtraHeight = $(rightPane).outerHeight(true) - $(rightPane).height(),
+        leftExtraHeight = $(leftPane).outerHeight(true) - $(leftPane).height();
+    $(rightPane).height($(window).height() - $(topPane).outerHeight(true) - rightExtraHeight);
+    $(leftPane).height($(rightPane).height() - leftExtraHeight);
 }
 
-setPaneHeights();
-$(window).resize(setPaneHeights);
+function setMapperDimensions () {
+    var $mapper = $('.mapper'),
+        mapperMargin = $mapper.outerWidth(true) - $mapper.outerWidth(false)
+        scrollBarWidth = 16; // Just an approx.
+    $mapper.width(rightPane.innerWidth() - mapperMargin - scrollBarWidth);
+}
 
+$(window).resize(setPaneHeights);
+$(window).resize(setMapperDimensions);
+$(window).resize();
 
 /* match menu lists  */
 var matchers = $('.mapper td.match');
@@ -211,14 +219,20 @@ $(reset_buttons).each( function () {
 
 
 /* control panel */
-var saveButton = $('.button', topPane).first();
-var resetButton = $('.button', topPane).last();
+var $saveButton = $('.control.save', topPane),
+    $resetButton = $('.control.reset', topPane),
+    $mapallButton = $('.control.mapall', topPane),
+    $viewTableButton = $('.control.viewTable-button', topPane);
 
-$(resetButton).click(function () {
+$resetButton.click(function () {
     $(reset_buttons).click();
 });
 
-$(saveButton).click(function () {
+$mapallButton.click(function () {
+    $(accept_buttons).click();
+});
+
+$saveButton.click(function () {
     var n=0, mappings = {};
     $('.new-mapping', matchers).each(function () {
 	var mapping = $(this).attr('id').split('-is-');
@@ -233,6 +247,25 @@ $(saveButton).click(function () {
                 .removeAttr('style');
 	    alert('Saved OK');
         });
+    }
+});
+
+$viewTableButton.click(function () {
+    var $window = $('.pane.right'),
+        $mapper = $('.mapper', $window),
+        $table = $('.viewTable', $window);
+
+    if (!$table.length) {
+        $table = viewTable.getTable();
+        $table.appendTo($window);
+    }
+
+    if ($mapper.is(':hidden')) {
+        $table.hide();
+        $mapper.show();
+    } else {
+        $mapper.hide();
+        $table.show();
     }
 });
 
