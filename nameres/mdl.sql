@@ -108,7 +108,6 @@ CREATE VIEW mdl_description_length AS
 	    ((SUM(i.card) / COUNT(*) / s.n) / s.n) * SUM(i.lg_card + l.lg_card) term3
        FROM mdl_match_counts_by_len i, mdl_input_stats s, mdl_dict_card_by_len l
       WHERE i.field_id = s.field_id
-	AND i.source_id = s.source_id
 	AND i.att_id = l.att_id
    GROUP BY i.source_id, i.field_id, i.att_id, s.avglen, s.maxlen, s.n;
 
@@ -130,11 +129,11 @@ DECLARE
   new_source_id ALIAS FOR $2;
 BEGIN
   INSERT INTO local_mdl_dictionaries (source_id, field_id, value, c)
-       SELECT new_source_id, field_id, SUBSTRING(value FOR 4095), COUNT(*)
+       SELECT new_source_id, field_id, SUBSTRING(value FOR 1000), COUNT(*)
          FROM local_data
 	WHERE field_id = new_field_id
 	  AND value IS NOT NULL
-     GROUP BY field_id, value;
+     GROUP BY field_id, SUBSTRING(value FOR 1000);
 
   INSERT INTO mdl_input_stats (source_id, field_id, n, avglen, maxlen)
        SELECT source_id, field_id, SUM(c),
@@ -157,21 +156,23 @@ BEGIN
   TRUNCATE mdl_input_stats;
   TRUNCATE mdl_base_dl;
 
+  -- MDL Dictionaries
   ALTER TABLE local_mdl_dictionaries DROP CONSTRAINT local_mdl_dictionaries_pkey;
 
   INSERT INTO local_mdl_dictionaries (field_id, value, c)
-       SELECT field_id, SUBSTRING(value FOR 4095), COUNT(*)
+       SELECT field_id, SUBSTRING(value FOR 1000), COUNT(*)
          FROM local_data
         WHERE value IS NOT NULL
-     GROUP BY field_id, value;
-
-  ALTER TABLE local_mdl_dictionaries ADD PRIMARY KEY (value, field_id);
+     GROUP BY field_id, SUBSTRING(value FOR 1000);
 
   UPDATE local_mdl_dictionaries a
      SET source_id = b.source_id
     FROM local_fields b
    WHERE a.field_id = b.id;
 
+  ALTER TABLE local_mdl_dictionaries ADD PRIMARY KEY (value, field_id);
+
+  -- MDL Statistics
   INSERT INTO mdl_input_stats (source_id, field_id, n, avglen, maxlen)
        SELECT source_id, field_id, SUM(c),
               SUM(length(value) * c)::FLOAT / SUM(c), MAX(length(value))::FLOAT

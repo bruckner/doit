@@ -147,13 +147,13 @@ BEGIN
        SELECT *
          FROM local_dist_stats_vw;
 
-  CREATE INDEX idx_local_dist_stats_source_id ON local_dist_stats (source_id);
-  CREATE INDEX idx_local_dist_stats_field_id ON local_dist_stats (field_id);
-
   UPDATE local_dist_stats a
      SET source_id = b.source_id
     FROM local_fields b
    WHERE a.field_id = b.id;
+
+  CREATE INDEX idx_local_dist_stats_source_id ON local_dist_stats (source_id);
+  CREATE INDEX idx_local_dist_stats_field_id ON local_dist_stats (field_id);
 EXCEPTION
   WHEN NUMERIC_VALUE_OUT_OF_RANGE THEN
     RETURN;

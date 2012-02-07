@@ -160,9 +160,6 @@ BEGIN
          FROM local_ngrams_raw
      GROUP BY field_id, gram;
 
-  ALTER TABLE local_ngrams ADD PRIMARY KEY (gram, field_id);
-  CREATE INDEX idx_local_ngrams_source_id ON local_ngrams (source_id);
-
   UPDATE local_ngrams a
      SET source_id = b.source_id
     FROM local_fields b
@@ -172,6 +169,9 @@ BEGIN
      SET tf = ln.c::FLOAT / dl.len
     FROM local_ngrams_doc_lens dl
    WHERE ln.field_id = dl.field_id;
+
+  ALTER TABLE local_ngrams ADD PRIMARY KEY (gram, field_id);
+  CREATE INDEX idx_local_ngrams_source_id ON local_ngrams (source_id);
 END
 $$ LANGUAGE plpgsql;
 
@@ -192,23 +192,21 @@ BEGIN
 	WHERE lvn.field_id = aa.local_id
      GROUP BY aa.global_id, lvn.gram;
 
-  ALTER TABLE global_ngrams ADD PRIMARY KEY (gram, att_id);
-
   -- Recompute tf scores (slow?!)
   UPDATE global_ngrams gvn
      SET tf = gvn.c::float / dl.len::float
     FROM global_ngrams_doc_lens dl
    WHERE gvn.att_id = dl.att_id;
 
+  ALTER TABLE global_ngrams ADD PRIMARY KEY (gram, att_id);
+
   -- Recompute idf scores
+  TRUNCATE ngrams_idf;
   ALTER TABLE ngrams_idf DROP CONSTRAINT ngrams_idf_pkey;
 
-  TRUNCATE ngrams_idf;
   INSERT INTO ngrams_idf (gram)
        SELECT DISTINCT gram
          FROM local_ngrams;
-
-  ALTER TABLE ngrams_idf ADD PRIMARY KEY (gram);
 
   doc_count := COUNT(*)::FLOAT FROM global_attributes;
 
@@ -226,6 +224,8 @@ BEGIN
      SET idf = sqrt(ln(doc_count))
    WHERE idf IS NULL;
 
+  ALTER TABLE ngrams_idf ADD PRIMARY KEY (gram);
+
   -- Recompute global norms
   TRUNCATE global_ngrams_norms;
   INSERT INTO global_ngrams_norms (att_id, norm)
@@ -241,7 +241,6 @@ BEGIN
          FROM local_ngrams tf, ngrams_idf idf
         WHERE tf.gram = idf.gram
      GROUP BY tf.source_id, tf.field_id;
-
 END
 $$ LANGUAGE plpgsql;
 
