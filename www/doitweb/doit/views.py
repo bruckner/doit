@@ -28,8 +28,9 @@ def mapper(req, sid, dbname):
     for fid in field_mappings:
         egs.setdefault(int(fid), None)
         field_mappings[fid]['example'] = egs[int(fid)]
+    attr_list = sorted(field_mappings.values(), key=lambda f: f['match']['score'])
     return render_to_response('doit/mapper.html', {
-        'attr_list': field_mappings.values(), 'source_id': sid, 
+        'attr_list': attr_list, 'source_id': sid, 
         'meta': meta,})
 
 def mapper_by_field_name(req, dbname, field_name, comp_op):
@@ -44,6 +45,38 @@ def mapper_by_field_name(req, dbname, field_name, comp_op):
     return render_to_response('doit/mapper.html', {
         'attr_list': field_mappings.values(), 'field_name': field_name,
         'meta': meta,})
+
+def viewTable_template(req):
+    return render_to_response('doit/viewTable_template.html')
+
+def source_data(req, dbname, sid):
+    db = DoitDB(dbname)
+    data = {'fields': db.source_fields(sid),
+            'entities': db.source_entities(sid, 10)}
+    return HttpResponse(simplejson.dumps(data),
+                        mimetype='application/json')
+
+def source_table(req, dbname, sid):
+    db = DoitDB(dbname)
+    fields = db.source_fields(sid)
+    entities = db.source_entities(sid, 10)
+    for entity in entities:
+        vals = []
+        for field in fields:
+            try:
+                vals.append(entity['fields'][field['id']])
+            except KeyError:
+                vals.append('')
+            if vals[-1] is None: vals[-1] = ''
+        entity['fields'] = vals
+    return render_to_response('doit/viewTable_template.html', {
+                'fields': fields, 'entities': entities})
+
+def source_entities(req, dbname, sid):
+    db = DoitDB(dbname)
+    data = {'entities': db.source_entities(sid, 10)}
+    return HttpResponse(simplejson.dumps(data),
+                        mimetype='application/json')
 
 def field_candidates(req, fid, dbname):
     db = DoitDB(dbname)

@@ -22,7 +22,8 @@
 -- Tables for local data and metadata
 CREATE TABLE local_sources (
 	id serial,
-	local_id text
+	local_id text,
+        n_entities INTEGER
 );
 
 CREATE TABLE local_source_meta (
@@ -32,12 +33,16 @@ CREATE TABLE local_source_meta (
 );
 
 CREATE TABLE local_fields (
-	id serial,
-	source_id int,
-	local_id text,
-	local_name text,
-	local_desc text,
-	display_order int
+	id SERIAL,
+	source_id INTEGER,
+	local_id TEXT,
+	local_name TEXT,
+	local_desc TEXT,
+	display_order INTEGER,
+        n_values INTEGER,
+        n_distinct INTEGER,
+        avg_val_len FLOAT,
+        sort_factor FLOAT
 );
 
 CREATE TABLE local_field_meta (

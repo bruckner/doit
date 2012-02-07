@@ -5,14 +5,12 @@ from operator import itemgetter
 
 # convert float (0 to 1) to 8 bit web color (e.g. 00 to ff)
 def f2c(x):
-	if x > 1.0:
-		x = 1.0
-	if x < 0.0:
-		x = 0.0
-	c = hex(int(255*x))[2:]
-	if len(c) == 1:
-		c = '0' + c
-	return c
+    if x > 1.0: x = 1.0
+    if x < 0.0: x = 0.0
+    c = hex(int(255*x))[2:]
+    if len(c) == 1:
+        c = '0' + c
+    return c
 
 # Faster than copy.deepcopy, but totally hacky:
 # http://stackoverflow.com/questions/1410615/copy-deepcopy-vs-pickle
@@ -30,22 +28,34 @@ class DoitDB:
 
     def sources(self):
         cur = self.conn.cursor()
-        cmd = '''SELECT lf.source_id, lsm.value AS "name", COUNT(*) AS "total",
-                        COUNT(am.global_id) AS "mapped",
-                        COUNT(am.global_id)::FLOAT / COUNT(*) AS "ratio"
-                   FROM local_fields lf 
+        cmd = '''SET enable_nestloop TO off;
+                 SELECT ls.id, lsm.value AS "name", nval.value,
+                        ls.n_entities, ls.n_fields,
+                        COUNT(am.source_id) AS "mapped",
+                        COUNT(am.source_id)::FLOAT / ls.n_fields AS "ratio"
+                   FROM local_sources ls 
               LEFT JOIN local_source_meta lsm
-                     ON lf.source_id = lsm.source_id
-              LEFT JOIN attribute_mappings am
-                     ON lf.id = am.local_id 
+                     ON ls.id = lsm.source_id
+              LEFT JOIN local_source_meta nval
+                     ON ls.id = nval.source_id
+              LEFT JOIN (
+                        SELECT lf.source_id
+                          FROM local_fields lf, attribute_mappings m
+                         WHERE m.local_id = lf.id
+                           AND lf.n_values > 0) am
+                     ON ls.id = am.source_id 
                   WHERE upper(lsm.meta_name) = 'NAME'
-               GROUP BY lf.source_id, lsm.value
-               ORDER BY COUNT(*) - COUNT(am.global_id) DESC, total DESC;'''
+                    AND upper(nval.meta_name) = '#VALUES'
+                    AND n_fields > 0
+               GROUP BY ls.id, ls.n_entities, ls.n_fields, lsm.value, nval.value
+               ORDER BY random();'''
         cur.execute(cmd)
         source_list = []
-        for s in cur.fetchall():
-            source_list.append({'id': s[0], 'name': s[1], 'n_attr': s[2],
-                                'n_mapped': s[3]})
+        for rec in cur.fetchall():
+            sid, name, nval, nrow, nattr, nmapped, ratio = rec
+            source_list.append({'id': sid, 'name': name, 'n_val': nval,
+                                'n_attr': nattr, 'n_mapped': nmapped,
+                                'n_entities': nrow})
         cur.close()
         return source_list
 
@@ -61,14 +71,47 @@ class DoitDB:
 	self.conn.commit()
 	return method_name
 
+    def source_fields(self, source_id):
+        cur = self.conn.cursor()
+        cmd = '''SELECT id, local_name
+                   FROM local_fields
+                  WHERE source_id = %s
+                    AND n_values > 0
+               ORDER BY ROUND(sort_factor, 2) ASC, avg_val_len ASC;'''
+        cur.execute(cmd, (source_id,))
+        fields = []
+        for rec in cur.fetchall():
+            fid, name = rec
+            fields.append({'id': fid, 'name': name})
+        return fields
+
+    def source_entities(self, source_id, n_entities):
+        cur = self.conn.cursor()
+        cmd = '''SELECT entity_id, field_id, value
+                   FROM local_data
+                  WHERE entity_id IN (
+                        SELECT id
+                          FROM (
+                               SELECT id FROM local_entities
+                                WHERE source_id = %s LIMIT 1000) t
+                      ORDER BY random() LIMIT %s);'''
+        cur.execute(cmd, (source_id, n_entities,))
+        entities = dict()
+        for rec in cur.fetchall():
+            entity, field, value = rec
+            entities.setdefault(entity, {'id': entity, 'fields': dict()})
+            entities[entity]['fields'][field] = value
+        return entities.values()
+
     def source_meta(self, source_id):
         cur = self.conn.cursor()
-        cmd = 'SELECT meta_name, value FROM local_source_meta ' \
-              ' WHERE source_id = %s;'
+        cmd = '''SELECT meta_name, value FROM local_source_meta
+                  WHERE source_id = %s
+               ORDER BY meta_name DESC;'''
 	cur.execute(cmd, (source_id,))
 	metadata = []
 	for rec in cur.fetchall():
-		metadata.append({'name': rec[0], 'value': rec[1]})
+            metadata.append({'name': rec[0], 'value': rec[1]})
 	return metadata
 
     def field_meta(self, field_id):
@@ -142,7 +185,8 @@ class DoitDB:
                         global_attributes ga
                   WHERE lf.id = ama.local_id
                     AND ama.global_id = ga.id
-                    AND lf.source_id = %s;'''
+                    AND lf.source_id = %s
+                    AND lf.n_values > 0;'''
         cur.execute(cmd, (source_id,))
         for rec in cur.fetchall():
             fields.setdefault(rec[0], dict())
@@ -150,20 +194,21 @@ class DoitDB:
             fields[rec[0]]['name'] = rec[1]
             fields[rec[0]]['match'] = {
                 'id': rec[2], 'name': rec[3], 'who_mapped': rec[4],
-                'is_mapping': True}
+                'is_mapping': True, 'score': 2.0}
         cmd = '''SELECT lf.id, lf.local_name, nnr.match_id, ga.name, nnr.score
                    FROM nr_ncomp_results_tbl nnr, local_fields lf,
                         global_attributes ga
                   WHERE nnr.field_id = lf.id
                     AND nnr.source_id = %s
                     AND nnr.match_id = ga.id
+                    AND lf.n_values > 0
                ORDER BY score desc;'''
         cur.execute(cmd, (source_id,))
         for rec in cur.fetchall():
             if rec[0] not in fields:
                 fields[rec[0]] = {'id': rec[0], 'name': rec[1], 'match': {
                     'id': rec[2], 'name': rec[3], 'score': rec[4],
-                    'green': f2c(rec[4] / 2.0), 'red':f2c(1.0 - rec[4] / 3.0)}}
+                    'green': f2c(rec[4] / 1.0), 'red':f2c(1.0 - rec[4] / 2.0)}}
         return fields
 
     def field_mappings_by_name(self, field_name, exact_match=False, n=100):
