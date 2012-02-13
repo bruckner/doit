@@ -38,13 +38,15 @@ $(matchers).each(function () {
     });
 });
 
-function get_match_list(mlist, field_id) {
-    var url = basePath + 'fields/' + field_id + '/candidates/';
-    var data = {};
-    var callback = function (responseText) {
-        $(mlist).html(responseText);
-        init_match_list(mlist);
-    };
+function get_match_list(mlist, field_id, afterLoad) {
+    afterLoad = (typeof afterLoad === 'function') ? afterLoad : function () {};
+    var url = basePath + 'fields/' + field_id + '/candidates/',
+        data = {},
+        callback = function (responseText) {
+            $(mlist).html(responseText);
+            init_match_list(mlist);
+            afterLoad();
+        };
     $(mlist).html('<p>Loading...</p>');
     $.get(url, data, callback);
 }
@@ -181,25 +183,35 @@ $(accept_buttons).each( function () {
 });
 
 $(reject_buttons).each(function () {
-    var container = $(this).parent().closest('tr');
-    $(this).click( function () {
-	var mlist = $(container).find('.map-list');
-	$('.selected', mlist)
-            .removeClass('selected')
-            .next()
-                .addClass('selected');
-        if (!$('.selected', mlist).length)
-            $('.candidate', mlist).first().addClass('selected');
-        update_mapping_choice(mlist);
+    var $this = $(this),
+        $container = $this.parent().closest('tr'),
+	$mlist = $container.find('.map-list'),
+        currentMapping = $container.find('.choice').attr('id'),
+        fieldId = currentMapping.substr(0, currentMapping.indexOf('-'));
+    $this.click( function () {
+        function selectNextChoice () {
+	    $('.selected', $mlist)
+                .removeClass('selected')
+                .addClass('rejected')
+                .next()
+                    .addClass('selected');
+            if (!$('.selected', $mlist).length)
+                $('.candidate', $mlist).first().addClass('selected');
+            update_mapping_choice($mlist);
+        }
+        if (!$mlist.find('.candidate').length)
+            get_match_list($mlist, fieldId, selectNextChoice);
+        else
+            selectNextChoice();
     });
 });
 
 $(reset_buttons).each( function () {
-    var container = $(this).parent().closest('tr');
-    if ($(container).find('.choice.mapping').length)
+    var $container = $(this).parent().closest('tr');
+    if ($container.find('.choice.mapping').length)
         return;
     $(this).click( function () {
-	$(container)
+	$container
             .removeClass('mapped')
             .addClass('unmapped')
             .find('.match')
@@ -210,6 +222,9 @@ $(reset_buttons).each( function () {
 	            .removeClass('new-mapping')
                     .removeClass('mapping')
 	        .end()
+                //.find('.rejected')
+                //    .removeClass('rejected')
+                //.end()
 	    .end()
 	    .find('.status')
 	        .text('unmapped')
@@ -233,20 +248,27 @@ $mapallButton.click(function () {
 });
 
 $saveButton.click(function () {
-    var n=0, mappings = {};
+    var mappings = [],
+        rejected = [];
     $('.new-mapping', matchers).each(function () {
-	var mapping = $(this).attr('id').split('-is-');
-	mappings[mapping[0]] = mapping[1];
-        ++n;
+	mappings.push($(this).attr('id').split('-is-'));
     });
-    if (n) {
-        $.post(basePath + 'save', mappings, function (d) {
-            $('.new-mapping')
-                .removeClass('new-mapping')
-                .addClass('mapping')
-                .removeAttr('style');
-	    alert('Saved OK');
-        });
+    $('.rejected', matchers).each(function () {
+	rejected.push($(this).attr('id').split('-to-'));
+    });
+    if (mappings.length + rejected.length) {
+        var url = basePath + 'save',
+            data = 'mappings=' + JSON.stringify(mappings) +
+                   '&rejects=' + JSON.stringify(rejected),
+            callback = function (d) {
+                $('.new-mapping')
+                    .removeClass('new-mapping')
+                    .addClass('mapping')
+                    .removeAttr('style');
+                $('.rejected').removeClass('rejected');
+	        alert('Saved OK');
+            };
+        $.post(url, data, callback);
     }
 });
 

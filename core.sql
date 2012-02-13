@@ -233,6 +233,16 @@ CREATE TABLE attribute_mappings (
        why_created text
 );
 
+CREATE TABLE attribute_antimappings (
+       local_id integer,
+       global_id integer,
+       confidence float,
+       authority float,
+       who_created text,
+       when_created timestamp,
+       why_created text
+);
+
 CREATE VIEW attribute_affinities AS
      SELECT local_id, global_id, LEAST(GREATEST(0.0, SUM(authority * confidence)), 1.0) affinity
        FROM attribute_mappings

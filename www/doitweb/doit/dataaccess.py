@@ -36,17 +36,17 @@ class DoitDB:
                    FROM local_sources ls 
               LEFT JOIN local_source_meta lsm
                      ON ls.id = lsm.source_id
+                    AND upper(lsm.meta_name) = 'NAME'
               LEFT JOIN local_source_meta nval
                      ON ls.id = nval.source_id
+                    AND upper(nval.meta_name) = '#VALUES'
               LEFT JOIN (
                         SELECT lf.source_id
                           FROM local_fields lf, attribute_mappings m
                          WHERE m.local_id = lf.id
                            AND lf.n_values > 0) am
                      ON ls.id = am.source_id 
-                  WHERE upper(lsm.meta_name) = 'NAME'
-                    AND upper(nval.meta_name) = '#VALUES'
-                    AND n_fields > 0
+                  WHERE n_fields > 0
                GROUP BY ls.id, ls.n_entities, ls.n_fields, lsm.value, nval.value
                ORDER BY random();'''
         cur.execute(cmd)
@@ -131,7 +131,7 @@ class DoitDB:
 	metadata.insert(0, {'name': 'Name', 'value': rec[1]})
 	return metadata
 
-    def create_mappings(self, pairs):
+    def create_mappings(self, pairs, anti=False):
         if len(pairs) == 0:
             return
         cur = self.conn.cursor()
@@ -140,6 +140,7 @@ class DoitDB:
               '    local_id, global_id, confidence, authority, who_created, ' \
               '    when_created, why_created) ' \
               'VALUES '
+        if anti: cmd = cmd.replace('mappings', 'antimappings')
         for local_id, global_id in pairs:
             cmd = cmd + '(%s, %s, 1.0, 0.5, %s, NOW(), %s), '
 	    params.append(local_id)

@@ -85,9 +85,12 @@ def field_candidates(req, fid, dbname):
 
 # Handles new mapping POST
 def mapper_results(req, dbname):
-	db = DoitDB(dbname)
-	s = db.create_mappings(req.POST.items())
-	return HttpResponse(s)
+    db = DoitDB(dbname)
+    mappings = simplejson.loads(req.POST['mappings'])
+    rejects = simplejson.loads(req.POST['rejects'])
+    s = db.create_mappings(mappings)
+    t = db.create_mappings(rejects, anti=True)
+    return HttpResponse(s)
 
 # currently broken...
 def lowscoremapper(req, dbname):
