@@ -74,13 +74,15 @@ body {margin:0;padding:0;font-family:'lucida grande',tahoma,verdana,arial,sans-s
 .choice.mapping {font-weight:bold;color:black;border-left:2em solid #627AAD;}
 .choice.new-mapping {font-weight:bold;color:#444444;border:2px solid #627AAD;}
 
-.mapper .map-list-container {display:none;border:2px solid #BBBBBB;background-color:white}
+.mapper .map-list-container {display:none;width:240px;border:2px solid #BBBBBB;background-color:white}
 .mapper .map-list-container.open {display:block;position:absolute;}
 .mapper .map-list-container .filter {padding:2px;}
 .mapper .map-list-container .filter input {padding:2px;color:#606060;border-radius:4px;}
-.mapper ul.map-list {margin:0;padding:0;max-height:240px;overflow-x:hidden;overflow-y:scroll;}
-.mapper ul.map-list li.candidate {padding:4px;padding-top:10px;width:240px;overflow:auto;cursor:pointer;list-style:none;border-left:2em solid #627AAD;border-bottom:1px solid white;}
+.mapper ul.map-list {margin:0;padding:0;max-height:217px;overflow-x:hidden;overflow-y:scroll;}
+.mapper ul.map-list li.candidate {padding:4px;padding-top:10px;overflow:auto;cursor:pointer;list-style:none;border-left:2em solid #627AAD;border-bottom:1px solid white;}
 .mapper ul.map-list li.candidate:hover {background-color:#D6F6F6;}
+.mapper .suggest {padding:10px;cursor:pointer;border-left:2em solid #C0C0C0;}
+.mapper .suggest:hover {background-color:#D6F6F6;}
 
 .mapper .actions {width:200px;}
 .mapper .status {margin:2px 8px;padding:4px;width:70px;}
@@ -131,6 +133,9 @@ body {margin:0;padding:0;font-family:'lucida grande',tahoma,verdana,arial,sans-s
 .viewTable .blankCell {}
 .viewTable .data {min-width:108px;background-color:white;}
 
-
-
+.suggest-new-attribute-form span {font-weight:bold;}
+.suggest-new-attribute-form label {padding-right:1em;}
+.suggest-new-attribute-form div {margin:8px;}
+.suggest-new-attribute-form textarea {width:100%;min-height:100px;}
+.suggest-new-attribute-form input[type="text"] {width:300px;padding:2px;}
 

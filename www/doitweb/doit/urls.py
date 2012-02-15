@@ -13,6 +13,8 @@ urlpatterns = patterns('doit.views',
     (r'^(?P<dbname>\w+)/sources/(?P<sid>\d+)/process/(?P<method_index>[0-4])/', 'source_processor'),
     (r'^(?P<dbname>\w+)/fields/(?P<comp_op>(like|named))/(?P<field_name>\w+)/map$', 'mapper_by_field_name'),
     (r'^(?P<dbname>\w+)/save$', 'mapper_results'),
+    (r'^(?P<dbname>\w+)/suggest-new-attribute/$', 'suggest_new_attribute'),
+    (r'^(?P<dbname>\w+)/suggest-new-attribute/form', 'suggest_new_attribute_form'),
 
     (r'^(?P<dbname>\w+)/fields/(?P<fid>\d+)/$', redirect_to, {'url': 'summary',}),
     (r'^(?P<dbname>\w+)/fields/(?P<fid>\d+)/candidates/$', 'field_candidates'),

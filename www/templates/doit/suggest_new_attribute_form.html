@@ -1,0 +1,25 @@
+<form class="suggest-new-attribute-form" target="/doit/{{ dbname }}/suggest-new-attribute/" method="POST">
+  <fieldset>
+    <legend>Suggest a New Attribute</legend>
+    <div>
+      <label>Target field:</label>
+      <span>{{ fname }}</span>
+      <input type="hidden" name="fid" value="{{ fid }}"></input>
+    </div>
+    <div>
+      <label>Suggestion:</label>
+      <input type="text" name="suggestion"></input>
+    </div>
+    <div>
+      <label>Your name:</label>
+      <input type="text" name="user"></input>
+    </div>
+    <div>
+      <div>Notes</div>
+      <textarea name="comment"></textarea>
+    </div>
+    <div>
+      <input type="Submit" value="Submit"></input>
+    </div>
+  </fieldset>
+</form>

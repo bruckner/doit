@@ -92,6 +92,20 @@ def mapper_results(req, dbname):
     t = db.create_mappings(rejects, anti=True)
     return HttpResponse(s)
 
+def suggest_new_attribute_form(req, dbname):
+    return render_to_response('doit/suggest_new_attribute_form.html', {
+        'fid': req.GET['fid'], 'fname': req.GET['fname'], 'dbname': dbname})
+
+def suggest_new_attribute(req, dbname):
+    db = DoitDB(dbname)
+    field_id = req.POST['fid']
+    suggestion = req.POST['suggestion']
+    username = req.POST['user']
+    comment = req.POST['comment']
+    success = db.new_attribute(field_id, suggestion, username, comment)
+    return HttpResponse(simplejson.dumps({'success': success}),
+                        mimetype='application/json')
+
 # currently broken...
 def lowscoremapper(req, dbname):
 	db = DoitDB(dbname)

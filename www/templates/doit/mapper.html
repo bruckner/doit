@@ -61,7 +61,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	<th class="status header">Status</th>
       </tr>
       {% for attr in attr_list %}
-      <tr id="fid{{ attr.id }}" class="{% if not attr.match.is_mapping %}un{% endif %}mapped {% cycle '' 'alt' %}">
+      <tr id="fid{{ attr.id }}" class="mapper-row {% if not attr.match.is_mapping %}un{% endif %}mapped {% cycle '' 'alt' %}">
 	<td class="attr" title='e.g. "{{ attr.example|striptags|truncatewords:6 }}"'>{{ attr.name }}</td>
 	<td class="match">
             <table>
@@ -81,6 +81,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
                   <div class="map-list-container">
                     <div class="filter"><input type="text" value="Filter"></input></div>
                     <ul class="map-list"></ul>
+                    <div class="suggest"><a>Suggest new...</a></div>
                   </div>
                 </td>
                 <td><div class="button{% if attr.match.is_mapping %} disabled{% endif %}">V</div></td>

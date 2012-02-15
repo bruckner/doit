@@ -154,6 +154,32 @@ function update_filter (inputEl) {
             .show();
 }
 
+/* match list "suggest new..." buttons */
+var $suggButtons = $('.map-list-container .suggest');
+
+$suggButtons.click(function () {
+   var $this = $(this),
+       $row = $this.closest('.mapper-row'),
+       fid = $row.attr('id').substr(3),
+       fname = $row.find('.attr').text(),
+       url = basePath + 'suggest-new-attribute/form?fid=' + fid + '&fname=' + fname,
+       width = 600,
+       callback = function () {
+           var $suggestForm = $('.popover form');
+           $suggestForm.submit(function (e) {
+               e.preventDefault();
+               var url = basePath + 'suggest-new-attribute/',
+                   data = $suggestForm.serialize(),
+                   callback = function () {
+                       alert('Ok!');
+                       close_popover();
+                   };
+               $.post(url, data, callback);
+           });
+       };
+   fill_popover(url, width, callback); 
+});
+
 
 
 /* action buttons */
@@ -326,13 +352,16 @@ function close_popover () {
     $('.popover').remove();
 }
 
-function fill_popover (url, width) {
+function fill_popover (url, width, callback) {
     close_popover();
+    width = width || 600;
+    callback = typeof callback === 'function' ? callback : function () {};
     var pop = $(open_popover(width));
 
     $(pop).html('<p>Loading...</p>');
     $.get(url, function (d) {
 	$(pop).html(d);
+        callback();
     });
 
     return $(pop);

@@ -243,6 +243,14 @@ CREATE TABLE attribute_antimappings (
        why_created text
 );
 
+CREATE TABLE new_attribute_suggestions (
+       reference_field_id INTEGER,
+       suggested_name TEXT,
+       who_suggested TEXT,
+       when_suggested TIMESTAMP,
+       why_suggested TEXT
+);
+
 CREATE VIEW attribute_affinities AS
      SELECT local_id, global_id, LEAST(GREATEST(0.0, SUM(authority * confidence)), 1.0) affinity
        FROM attribute_mappings

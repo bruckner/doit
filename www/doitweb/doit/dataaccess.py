@@ -89,13 +89,16 @@ class DoitDB:
         cur = self.conn.cursor()
         cmd = '''SELECT entity_id, field_id, value
                    FROM local_data
-                  WHERE entity_id IN (
+                  WHERE field_id IN (
+                        SELECT id FROM local_fields
+                         WHERE source_id = %s)
+                    AND entity_id IN (
                         SELECT id
                           FROM (
                                SELECT id FROM local_entities
                                 WHERE source_id = %s LIMIT 1000) t
                       ORDER BY random() LIMIT %s);'''
-        cur.execute(cmd, (source_id, n_entities,))
+        cur.execute(cmd, (source_id, source_id, n_entities,))
         entities = dict()
         for rec in cur.fetchall():
             entity, field, value = rec
@@ -151,6 +154,16 @@ class DoitDB:
 	cur.execute(cmd, params)
 	self.conn.commit()
 	return str([cmd, params])
+
+    def new_attribute(self, ref_id, suggestion, username, comment):
+        cur = self.conn.cursor()
+        cmd = '''INSERT INTO new_attribute_suggestions (
+                             reference_field_id, suggested_name, who_suggested,
+                             when_suggested, why_suggested)
+                      VALUES (%s, %s, %s, NOW(), %s);'''
+        cur.execute(cmd, (ref_id, suggestion, username, comment,))
+        self.conn.commit()
+        return True
 
     def global_attributes(self):
         cur = self.conn.cursor()
