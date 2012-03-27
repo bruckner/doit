@@ -111,6 +111,14 @@ CREATE VIEW mdl_description_length AS
 	AND i.att_id = l.att_id
    GROUP BY i.source_id, i.field_id, i.att_id, s.avglen, s.maxlen, s.n;
 
+-- Description length normalized by base (generic string) DL, then subtracted from 1
+CREATE VIEW mdl_results AS
+     SELECT a.source_id, a.field_id, 'mdl'::TEXT method_name,
+            a.att_id match_id,
+            GREATEST(0, 1.0 - (a.term1+a.term2+a.term3) / b.dl) score
+       FROM mdl_description_length a, mdl_base_dl b
+      WHERE a.field_id = b.field_id;
+
 
 CREATE OR REPLACE FUNCTION mdl_preprocess_source (INTEGER) RETURNS VOID AS
 $$
@@ -209,12 +217,10 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION mdl_results_for_all_unmapped () RETURNS VOID AS
 $$
 BEGIN
-  -- Description length normalized by base (generic string) DL, then subtracted from 1
-  INSERT INTO nr_raw_results (source_id, field_id, method_name, match_id, score)
-  SELECT a.source_id, a.field_id, 'mdl', a.att_id, GREATEST(0, 1.0 - (a.term1+a.term2+a.term3) / b.dl)
-    FROM mdl_description_length a, mdl_base_dl b
-   WHERE a.field_id = b.field_id
-     AND a.field_id NOT IN (SELECT local_id FROM attribute_mappings);
+  INSERT INTO nr_raw_results
+  SELECT *
+    FROM mdl_results
+   WHERE field_id != ANY (ARRAY(SELECT local_id FROM attribute_mappings));
 END
 $$ LANGUAGE plpgsql;
 
@@ -222,11 +228,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION mdl_results_for_all () RETURNS VOID AS
 $$
 BEGIN
-  -- Description length normalized by base (generic string) DL, then subtracted from 1
-  INSERT INTO nr_raw_results (source_id, field_id, method_name, match_id, score)
-  SELECT a.source_id, a.field_id, 'mdl', a.att_id, GREATEST(0, 1.0 - (a.term1+a.term2+a.term3) / b.dl)
-    FROM mdl_description_length a, mdl_base_dl b
-   WHERE a.field_id = b.field_id;
+  INSERT INTO nr_raw_results SELECT * FROM mdl_results;
 END
 $$ LANGUAGE plpgsql;
 
@@ -236,12 +238,10 @@ $$
 DECLARE
   test_source ALIAS FOR $1;
 BEGIN
-  -- Description length normalized by base (generic string) DL, then subtracted from 1
-  INSERT INTO nr_raw_results (source_id, field_id, method_name, match_id, score)
-  SELECT a.source_id, a.field_id, 'mdl', a.att_id, GREATEST(0, 1.0 - (a.term1+a.term2+a.term3) / b.dl)
-    FROM mdl_description_length a, mdl_base_dl b
-   WHERE a.field_id = b.field_id
-     AND a.source_id = test_source;
+  INSERT INTO nr_raw_results
+  SELECT *
+    FROM mdl_results
+   WHERE source_id = test_source;
 END
 $$ LANGUAGE plpgsql;
 
@@ -251,12 +251,10 @@ $$
 DECLARE
   test_field ALIAS FOR $1;
 BEGIN
-  -- Description length normalized by base (generic string) DL, then subtracted from 1
-  INSERT INTO nr_raw_results (field_id, method_name, match_id, score)
-  SELECT a.field_id, 'mdl', a.att_id, GREATEST(0, 1.0 - (a.term1+a.term2+a.term3) / b.dl)
-    FROM mdl_description_length a, mdl_base_dl b
-   WHERE a.field_id = b.field_id
-     AND a.field_id = test_field;
+  INSERT INTO nr_raw_results
+  SELECT *
+    FROM mdl_results
+   WHERE field_id = test_field;
 END
 $$ LANGUAGE plpgsql;
 

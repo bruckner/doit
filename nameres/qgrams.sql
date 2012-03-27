@@ -168,7 +168,7 @@ BEGIN
   INSERT INTO nr_raw_results (source_id, field_id, method_name, match_id, score)
        SELECT source_id, field_id, 'qgrams'::TEXT, att_id, similarity
          FROM qgrams_cosine_similarity
-        WHERE field_id NOT IN (SELECT local_id FROM attribute_mappings);
+        WHERE field_id != ANY (ARRAY(SELECT local_id FROM attribute_mappings));
 END
 $$ LANGUAGE plpgsql;
 

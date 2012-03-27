@@ -17,6 +17,24 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
+ *
+ * ngrams.sql -- Computes cosine similarity of columns of data.
+ *
+ * Column data from local_data is tokenized and loaded in local_ngrams (via 
+ * local_ngrams_raw view).  TF weights are stored local_ngrams, and IDF weights
+ * in ngrams_idf.  As columns are mapped to global attributes, ngrams are put
+ * in global_ngrams as appropriate.
+ *
+ * The view ngrams_cosine_similarity computes similarity by joining
+ * local_ngrams (TF), global_ngrams (TF), ngrams_idf (IDF), and local/global_
+ * ngrams_norms.
+ *
+ * The ngrams_preprocess_[source|field|all] functions handle loading new data 
+ * from local_data. The ngrams_preprocess_global function handles labeling
+ * tokens for global columns, and computes most of the term weights. The
+ * ngrams_results_* functions get similarity values and put them into
+ * nr_raw_results.
+ * 
  */
 
 -- Tables, views, and UDFs for value ngram matching method for name resolution
@@ -47,6 +65,11 @@ CREATE TABLE local_ngrams (
 );
 ALTER TABLE local_ngrams ADD PRIMARY KEY (gram, field_id);
 CREATE INDEX idx_local_ngrams_source_id ON local_ngrams (source_id);
+
+
+CREATE VIEW global_ngrams_raw AS
+     SELECT att_id, tokenize(value) gram
+       FROM global_data;
 
 CREATE TABLE global_ngrams (
        att_id INTEGER NOT NULL,
@@ -115,6 +138,12 @@ CREATE VIEW ngrams_cosine_similarity AS
         AND dtf.att_id = dn.att_id
    GROUP BY qtf.source_id, qtf.field_id, dtf.att_id, qn.norm, dn.norm;
 
+CREATE VIEW ngrams_results AS
+     SELECT source_id, field_id, 'ngrams'::TEXT AS "method_name",
+            att_id AS "match_id", similarity AS "score"
+       FROM ngrams_cosine_similarity;
+
+
 
 CREATE OR REPLACE FUNCTION ngrams_preprocess_source (INTEGER) RETURNS VOID AS
 $$
@@ -165,6 +194,7 @@ BEGIN
     FROM local_fields b
    WHERE a.field_id = b.id;
 
+  -- Compute local TF weights
   UPDATE local_ngrams ln
      SET tf = ln.c::FLOAT / dl.len
     FROM local_ngrams_doc_lens dl
@@ -191,6 +221,11 @@ BEGIN
          FROM local_ngrams lvn, attribute_affinities aa
 	WHERE lvn.field_id = aa.local_id
      GROUP BY aa.global_id, lvn.gram;
+
+  INSERT INTO global_ngrams (att_id, gram, c)
+       SELECT att_id, gram, COUNT(*)
+         FROM global_ngrams_raw
+     GROUP BY att_id, gram;
 
   -- Recompute tf scores (slow?!)
   UPDATE global_ngrams gvn
@@ -261,7 +296,7 @@ BEGIN
   INSERT INTO nr_raw_results (source_id, field_id, method_name, match_id, score)
        SELECT source_id, field_id, 'ngrams'::TEXT, att_id, similarity
          FROM ngrams_cosine_similarity
-        WHERE field_id NOT IN (SELECT local_id FROM attribute_mappings);
+        WHERE field_id != ANY (ARRAY(SELECT local_id FROM attribute_mappings));
 END
 $$ LANGUAGE plpgsql;
 

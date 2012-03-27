@@ -190,7 +190,7 @@ BEGIN
   INSERT INTO nr_raw_results (source_id, field_id, match_id, score, method_name)
        SELECT source_id, field_id, att_id, MAX((1.0 - p) * affinity) AS "score", 'dist'
          FROM dist_comps
-        WHERE field_id NOT IN (SELECT local_id FROM attribute_mappings)
+        WHERE field_id != ANY (ARRAY(SELECT local_id FROM attribute_mappings))
      GROUP BY source_id, field_id, att_id;
 END
 $$ LANGUAGE plpgsql;

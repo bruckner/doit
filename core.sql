@@ -65,6 +65,13 @@ CREATE TABLE local_data (
 CREATE INDEX idx_local_data_field_id ON local_data (field_id);
 --CREATE INDEX idx_local_data_entity_id ON local_data (entity_id);
 
+-- Table for global data... e.g. "dictionaries"
+CREATE TABLE global_data (
+       att_id INTEGER,
+       value TEXT,
+       n INTEGER
+);
+
 
 -- Default adapter to load from data source
 -- To override default adapter, replace this function
@@ -220,7 +227,9 @@ CREATE TABLE global_attributes (
        id serial,
        name text,
        external_id text,
-       derived_from text
+       derived_from text,
+       n_sources INTEGER,
+       probability FLOAT
 );
 
 CREATE TABLE attribute_mappings (
