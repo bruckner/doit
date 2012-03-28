@@ -181,6 +181,7 @@ CREATE VIEW nr_mcomp_error_rates AS
 CREATE OR REPLACE FUNCTION nr_composite_load() RETURNS void AS
 $$
 BEGIN
+  TRUNCATE nr_ncomp_results_tbl;
   INSERT INTO nr_ncomp_results_tbl
        SELECT *
        	 FROM nr_ncomp_results;
