@@ -214,13 +214,54 @@ END
 $$ LANGUAGE plpgsql;
 
 
+/* The following function is a liability, but also a great expedient.  The view
+ * mdl_results contains a GROUP BY in its definition.  Because of
+ * that, when it is queried with a WHERE clause, the WHERE predicate is treated
+ * like a HAVING clause in the view definition.  If the predicate contains a
+ * subquery, the PostgreSQL planner will not push the predicate down into the
+ * view definition's WHERE.  In the case where we'd like to run only on some
+ * subset of fields, as defined by a predicate on local_fields, this is the
+ * only way to push that join deep into the plan and thereby avoid computing
+ * all the results before applying the predicate.
+ */
+
+CREATE OR REPLACE FUNCTION mdl_results_for_field_pred (TEXT) RETURNS VOID AS
+$$
+DECLARE
+  pred ALIAS FOR $1;
+  cmd TEXT;
+BEGIN
+  cmd := 'INSERT INTO nr_raw_results (source_id, field_id, method_name, match_id, score)
+               SELECT a.source_id, a.field_id, ''mdl''::TEXT, a.att_id,
+                      GREATEST(0, 1.0 - (a.term1+a.term2+a.term3) / b.dl) score
+                 FROM (
+
+                        SELECT i.source_id, i.field_id, i.att_id,
+                               (SUM(i.card) / COUNT(*) /s.n) * log(2, s.maxlen::NUMERIC) term1,
+                               (1.0 - (SUM(i.card) / COUNT(*) / s.n)) * s.avglen * 8.0 term2,
+                               ((SUM(i.card) / COUNT(*) / s.n) / s.n) * SUM(i.lg_card + l.lg_card) term3
+                          FROM (
+
+                                 SELECT source_id, field_id, att_id, length(value) l, SUM(c) card, log(2, SUM(c)::NUMERIC) lg_card
+                                   FROM mdl_matches
+                                  WHERE field_id IN (SELECT id FROM local_fields WHERE ' || pred || ')
+                               GROUP BY source_id, field_id, att_id, l
+
+                               ) i, mdl_input_stats s, mdl_dict_card_by_len l
+                         WHERE i.field_id = s.field_id
+                           AND i.att_id = l.att_id
+                      GROUP BY i.source_id, i.field_id, i.att_id, s.avglen, s.maxlen, s.n
+
+                      ) a, mdl_base_dl b
+                WHERE a.field_id = b.field_id;';
+  EXECUTE cmd;
+END
+$$ LANGUAGE plpgsql;
+
 CREATE OR REPLACE FUNCTION mdl_results_for_all_unmapped () RETURNS VOID AS
 $$
 BEGIN
-  INSERT INTO nr_raw_results
-  SELECT *
-    FROM mdl_results
-   WHERE field_id != ANY (ARRAY(SELECT local_id FROM attribute_mappings));
+  PERFORM mdl_results_for_field_pred('id NOT IN (SELECT local_id FROM attribute_mappings)');
 END
 $$ LANGUAGE plpgsql;
 

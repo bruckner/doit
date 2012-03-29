@@ -162,13 +162,43 @@ END
 $$ LANGUAGE plpgsql;
 
 
+/* The following function is a liability, but also a great expedient.  The view
+ * qgrams_cosine_similarity contains a GROUP BY in its definition.  Because of
+ * that, when it is queried with a WHERE clause, the WHERE predicate is treated
+ * like a HAVING clause in the view definition.  If the predicate contains a
+ * subquery, the PostgreSQL planner will not push the predicate down into the
+ * view definition's WHERE.  In the case where we'd like to run only on some
+ * subset of fields, as defined by a predicate on local_fields, this is the
+ * only way to push that join deep into the plan and thereby avoid computing
+ * all the results before applying the predicate.
+ */
+
+CREATE OR REPLACE FUNCTION qgrams_results_for_field_pred (TEXT) RETURNS VOID AS
+$$
+DECLARE
+  pred ALIAS FOR $1; /* a predicate on local_fields */
+  cmd TEXT;
+BEGIN
+  cmd := 'INSERT INTO nr_raw_results (source_id, field_id, method_name, match_id, score)
+              SELECT ltf.source_id, ltf.field_id, ''qgrams''::TEXT, gtf.att_id,
+                     SUM(ltf.tf * idf.idf * gtf.tf * idf.idf)::float / (ln.norm * gn.norm) AS "similarity"
+                FROM local_qgrams ltf, qgrams_idf idf, local_qgrams_norms ln,
+                     global_qgrams gtf, global_qgrams_norms gn
+               WHERE ltf.gram = gtf.gram
+                 AND ltf.gram = idf.gram
+                 AND ltf.field_id = ln.field_id
+                 AND gtf.att_id = gn.att_id
+                 AND ltf.field_id IN (SELECT id FROM local_fields WHERE ' || pred || ')
+            GROUP BY ltf.source_id, ltf.field_id, gtf.att_id, ln.norm, gn.norm;';
+  EXECUTE cmd;
+END
+$$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION qgrams_results_for_all_unmapped () RETURNS VOID AS
 $$
 BEGIN
-  INSERT INTO nr_raw_results (source_id, field_id, method_name, match_id, score)
-       SELECT source_id, field_id, 'qgrams'::TEXT, att_id, similarity
-         FROM qgrams_cosine_similarity
-        WHERE field_id != ANY (ARRAY(SELECT local_id FROM attribute_mappings));
+  PERFORM qgrams_results_for_field_pred('id NOT IN (SELECT local_id FROM attribute_mappings)');
 END
 $$ LANGUAGE plpgsql;
 
