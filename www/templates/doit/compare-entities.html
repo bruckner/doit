@@ -1,0 +1,72 @@
+<html>
+<head>
+  <title></title>
+  <style>
+body {
+	font-family: Helvetica, Arial, sans-serif;
+}
+h1, h5 {
+	text-align:center;
+}
+.container {
+	padding: 2em;
+}
+form {
+	text-align: center;
+}
+table {
+	margin: 1em auto;
+	border-collapse: collapse;
+}
+.value {
+	padding: 4px;
+	width: 400px;
+	
+}
+.name {
+	text-align: center;
+	font-weight: bold;
+        background-color: #EDEDED;
+}
+.column-a {
+	background-color: #EDEDFF;
+}
+.column-b {
+	background-color: #FFEDED;
+}
+.alt {
+	background-color: white;
+}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Are column A and column B the same thing?</h1>
+    <form action="" method="POST">
+      <div>
+        <input type="submit" name="answer" value="Yes"></input>
+        <input type="submit" name="answer" value="No"></input>
+        <input type="submit" name="answer" value="Maybe"></input>
+        <input type="hidden" name="e1" value="{{ e1id }}"></input>
+        <input type="hidden" name="e2" value="{{ e2id }}"></input>
+      </div>
+    </form>
+    <h5>Our guess: {{ guess }}</h5>
+    <h5>Similarity score is {{ similarity }}.</h5>
+    <table>
+      <tr>
+        <th>Column A</th>
+        <td></td>
+        <th>Column B</th>
+      </tr>
+      {% for attr in attributes %}
+      <tr>
+        <td class="value column-a {% cycle '' 'alt' %}" title="{{ attr.value1 }}">{{ attr.value1|truncatewords:10 }}</td>
+        <td class="name {% cycle '' 'alt' %}">{{ attr.name }}</td>
+        <td class="value column-b {% cycle '' 'alt' %}" title="{{ attr.value2 }}">{{ attr.value2|truncatewords:10 }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+</body>
+</html>

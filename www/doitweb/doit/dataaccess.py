@@ -367,3 +367,44 @@ class DoitDB:
                                         'cscore': rec[4]})
             matches[rec[1]][rec[0]] = rec[3]
         return sorted(matches.values(), key=itemgetter('cscore'), reverse=True)
+
+    # get two entites to compare
+    def get_entities_to_compare(self, approx_sim):
+        cur = self.conn.cursor()
+        cmd = '''SELECT entity1_id, entity2_id, similarity
+                   FROM gbeskales.similar_entities
+                  WHERE similarity BETWEEN %s - 0.05 AND %s + 0.05
+               ORDER BY random()
+                  LIMIT 1;'''
+        cur.execute(cmd, (approx_sim, approx_sim,))
+        rec = cur.fetchone()
+        e1, e2, s = rec
+        return (e1, e2, s)
+
+    def entity_data(self, eid):
+        cur = self.conn.cursor()
+        cmd = '''SELECT g.id, lf.id, COALESCE(g.name, lf.local_name), ld.value
+                   FROM local_data ld
+             INNER JOIN local_fields lf
+                     ON ld.field_id = lf.id
+              LEFT JOIN (SELECT ga.id, ga.name, am.local_id
+                           FROM global_attributes ga, attribute_mappings am
+                          WHERE ga.id = am.global_id) g
+                     ON lf.id = g.local_id
+                  WHERE ld.entity_id = %s;'''
+        cur.execute(cmd, (int(eid),))
+        data = {}
+        for rec in cur.fetchall():
+            gid, fid, name, value = rec
+            value = '' if None else value
+            data[name] = value
+#            data.append({'global_id': gid, 'local_id': fid,
+#                         'name': name, 'value': value})
+        return data
+
+    def save_entity_comparison(self, e1id, e2id, answer):
+        cur = self.conn.cursor()
+        cmd = '''UPDATE gbeskales.similar_entities SET human_label = %s
+                  WHERE entity1_id = %s AND entity2_id = %s;'''
+        cur.execute(cmd, (answer, e1id, e2id))
+        self.conn.commit()

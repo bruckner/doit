@@ -1,4 +1,5 @@
 import math
+import random
 from doit.util import bucketize
 from doit.dataaccess import DoitDB
 from operator import itemgetter, attrgetter
@@ -197,4 +198,38 @@ def detail_scoring(req, dbname, fid):
             'db': dbname,})
 
 
+def compare_entities(req, dbname):
+    db = DoitDB(dbname)
+    save_entity_comparison_feedback(req, db)
+    target_similarity = req.GET['sim'] if 'sim' in req.GET \
+        else '0.' + str(random.randint(0, 9))
+    eid1, eid2, sim = db.get_entities_to_compare(target_similarity)
+    e1 = {'id': eid1, 'data': db.entity_data(eid1)}
+    e2 = {'id': eid2, 'data': db.entity_data(eid2)}
+    guess = 'Yes' if sim > 0.6 else 'No'
+    attr = pretty_order_entity_attributes(e1, e2)
+    return render_to_response('doit/compare-entities.html', {
+        'attributes': attr, 'similarity': sim, 'guess': guess,
+        'e1id': eid1, 'e2id': eid2,})
 
+def save_entity_comparison_feedback(req, db):
+    if not 'answer' in req.POST: return
+    db.save_entity_comparison(
+        req.POST['e1'], req.POST['e2'], req.POST['answer'])
+
+def pretty_order_entity_attributes(e1, e2):
+    attr = {}
+    for name, value in e1['data'].items():
+        attr[name] = {'name': name, 'value1': value}
+        attr[name]['value2'] = e2['data'][name] if name in e2['data'] else ''
+    for name, value in e2['data'].items():
+        if name not in attr:
+            attr[name] = {'name': name, 'value2': value, 'value1': ''}
+    def sort_order_key(a):
+        score = 0
+        if a['value1'] is not None and a['value1'] != '' and a['value1'] != 'None':
+            score += 1
+        if a['value2'] is not None and a['value2'] != '' and a['value2'] != 'None':
+            score += 1
+        return score * -1
+    return sorted(attr.values(), key=sort_order_key)

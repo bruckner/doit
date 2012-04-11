@@ -24,4 +24,6 @@ urlpatterns = patterns('doit.views',
     (r'^(?P<dbname>\w+)/fields/(?P<fid>\d+)/values/shared$', 'detail_shared'),
     (r'^(?P<dbname>\w+)/fields/(?P<fid>\d+)/values/distro$', 'detail_distro'),
     (r'^(?P<dbname>\w+)/fields/(?P<fid>\d+)/scores$', 'detail_scoring'),
+
+    (r'^(?P<dbname>\w+)/entities/compare', 'compare_entities'),
 )
