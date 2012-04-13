@@ -371,8 +371,8 @@ class DoitDB:
     # get two entites to compare
     def get_entities_to_compare(self, approx_sim):
         cur = self.conn.cursor()
-        cmd = '''SELECT entity1_id, entity2_id, similarity
-                   FROM gbeskales.similar_entities
+        cmd = '''SELECT entity_a, entity_b, similarity
+                   FROM entity_similarities
                   WHERE similarity BETWEEN %s - 0.05 AND %s + 0.05
                ORDER BY random()
                   LIMIT 1;'''
@@ -404,7 +404,7 @@ class DoitDB:
 
     def save_entity_comparison(self, e1id, e2id, answer):
         cur = self.conn.cursor()
-        cmd = '''UPDATE gbeskales.similar_entities SET human_label = %s
-                  WHERE entity1_id = %s AND entity2_id = %s;'''
+        cmd = '''UPDATE entity_similarities SET human_label = %s
+                  WHERE entity_a = %s AND entity_b = %s;'''
         cur.execute(cmd, (answer, e1id, e2id))
         self.conn.commit()

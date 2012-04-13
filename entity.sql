@@ -46,7 +46,7 @@ CREATE TABLE entity_field_norms (
         norm FLOAT
 );
 
-CREATE TABLE entity_field_cosine_similarity (
+CREATE TABLE entity_field_cosine_similarities (
         entity_a INTEGER,
         entity_b INTEGER,
         field_id INTEGER,
@@ -156,11 +156,11 @@ RAISE INFO 'Got tokens.';
 RAISE INFO 'Got norms.';
   /* Clean out any old calculations */
   /* This might be crazy slow... */
-  DELETE FROM entity_field_cosine_similarity
+  DELETE FROM entity_field_cosine_similarities
         WHERE entity_a IN (SELECT * FROM entity_test_group)
            OR entity_b IN (SELECT * FROM entity_test_group);
 RAISE INFO 'Got clean.';
-  INSERT INTO entity_field_cosine_similarity
+  INSERT INTO entity_field_cosine_similarities
        SELECT a.entity_id, b.entity_id, a.field_id,
               SUM(a.tf * b.tf) / (na.norm * nb.norm) sim
          FROM test_tokens a, test_tokens b, test_norms na, test_norms nb
@@ -181,14 +181,14 @@ RAISE INFO 'Got cosine similarity.';
   entity_size := SUM(weight) FROM entity_field_weights;
 
   /* Clean out any old calculations */
-  DELETE FROM entity_similarity
+  DELETE FROM entity_similarities
         WHERE entity_a IN (SELECT * FROM entity_test_group)
            OR entity_b IN (SELECT * FROM entity_test_group);
 
-  INSERT INTO entity_similarity
+  INSERT INTO entity_similarities
        SELECT cs.entity_a, cs.entity_b, SUM(fw.weight * cs.similarity),
               SUM(fw.weight * cs.similarity) / entity_size
-         FROM entity_field_cosine_similarity cs, entity_field_weights fw
+         FROM entity_field_cosine_similarities cs, entity_field_weights fw
         WHERE cs.field_id = fw.field_id
      GROUP BY cs.entity_a, cs.entity_b;
 END
