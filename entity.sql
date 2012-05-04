@@ -20,13 +20,16 @@ CREATE OR REPLACE FUNCTION entities_clean () RETURNS VOID AS
 $$
 BEGIN
   DROP TABLE entity_tokens CASCADE;
-  DROP TABLE entity_tokens_stats CASCADE;
-  DROP TABLE entity_field_norms;
+  DROP TABLE entity_field_norms CASCADE;
+  DROP TABLE entity_field_cosine_similaries CASCADE;
+  DROP TABLE entity_similarities CASCADE;
+  DROP TABLE entity_field_weights CASCADE;
+  DROP TABLE entity_test_group CASCADE;
 END
 $$ LANGUAGE plpgsql;
 
 
-/* Attribute-wise cosine similarity tables, views, and functions */
+/* Attribute-wise cosine similarity relations*/
 CREATE VIEW entity_tokens_raw AS
      SELECT entity_id, field_id, qgrams2(value, 3) token
        FROM local_data
@@ -53,6 +56,8 @@ CREATE TABLE entity_field_cosine_similarities (
         similarity FLOAT
 );
 
+
+/* Overall similarity relations */
 CREATE TABLE entity_similarities (
         entity_a INTEGER,
         entity_b INTEGER,
@@ -66,10 +71,15 @@ CREATE TABLE entity_field_weights (
         weight FLOAT
 );
 
+CREATE TABLE entity_matches (
+        entity_a INTEGER,
+        entity_b INTEGER
+);
+
+/* Test group table */
 CREATE TABLE entity_test_group (
         entity_id INTEGER PRIMARY KEY
 );
-
 
 
 CREATE OR REPLACE FUNCTION entities_preprocess_all () RETURNS VOID AS
@@ -132,6 +142,51 @@ RAISE INFO 'Got tf.';
 END
 $$ LANGUAGE plpgsql;
 
+
+CREATE OR REPLACE FUNCTION entities_weights_from_test_group () RETURNS VOID AS
+$$
+BEGIN
+  /* Uses test_group cosine similarity and matches results to train field weights */
+
+  TRUNCATE entity_field_weights;
+
+  CREATE TEMP TABLE training_pairs AS
+       SELECT a.entity_id entity_a, b.entity_id entity_b, 'f'::BOOLEAN is_match
+         FROM entity_test_group a, entity_test_group b
+        WHERE a.entity_id < b.entity_id;
+
+  UPDATE training_pairs p
+     SET is_match = 't'::BOOLEAN
+    FROM entity_matches m
+   WHERE p.entity_a = m.entity_a
+     AND p.entity_b = m.entity_b;
+
+  CREATE TEMP TABLE training_stats AS
+       SELECT field_id,
+              COUNT(CASE WHEN is_match THEN 1 ELSE NULL END) n_match,
+              COUNT(CASE WHEN is_match THEN NULL ELSE 1 END) n_mismatch,
+              SUM(CASE WHEN is_match THEN s.similarity ELSE 0 END) sum_match,
+              SUM(CASE WHEN is_match THEN 0 ELSE s.similarity END) sum_mismatch,
+              NULL::FLOAT avg_match, NULL::FLOAT avg_mismatch
+         FROM entity_field_cosine_similarities s, training_pairs p
+        WHERE s.entity_a = p.entity_a
+          AND s.entity_b = p.entity_b
+     GROUP BY field_id;
+
+  UPDATE training_stats
+     SET avg_match = sum_match::FLOAT / n_match,
+         avg_mismatch = sum_mismatch::FLOAT / n_mismatch;
+
+  INSERT INTO entity_field_weights
+       SELECT field_id, avg_match - avg_mismatch
+         FROM training_stats;
+
+  DROP TABLE training_pairs;
+  DROP TABLE training_stats;
+END
+$$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION entities_results_for_test_group () RETURNS VOID AS
 $$
 DECLARE
@@ -162,7 +217,7 @@ RAISE INFO 'Got norms.';
 RAISE INFO 'Got clean.';
   INSERT INTO entity_field_cosine_similarities
        SELECT a.entity_id, b.entity_id, a.field_id,
-              SUM(a.tf * b.tf) / (na.norm * nb.norm) sim
+              SUM(a.tf * b.tf) / (na.norm * nb.norm)
          FROM test_tokens a, test_tokens b, test_norms na, test_norms nb
         WHERE a.entity_id != b.entity_id
           AND a.field_id = b.field_id
