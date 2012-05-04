@@ -238,7 +238,7 @@ BEGIN
          avg_mismatch = sum_mismatch::FLOAT / n_mismatch;
 
   INSERT INTO entity_field_weights
-       SELECT field_id, entities_weight_formula(avg_match, avg_mismatch);
+       SELECT field_id, entities_weight_formula(avg_match, avg_mismatch)
          FROM training_stats;
 
   DROP TABLE training_pairs;
