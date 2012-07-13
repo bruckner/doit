@@ -19,51 +19,20 @@
  * SOFTWARE.
  */
 
--- input / output table for similarity join and clustering
+INSERT INTO configuration_properties (name, value, description) 
+     VALUES ('prob_dist_threshold', 0.05, 'Probability Distribution Threshold'),
+            ('est_dup', 0.00001, 'Estimated Duplicate Rate'),
+            ('bins_count', 5, 'Feature Bins'),
+            ('rel_perf_threshold', 500, NULL),
+            ('abs_perf_threshold', 0.2, NULL),
+            ('truncate_threshold', 0.95, NULL);
 
+--prob_dist_threshold ALIAS FOR $1; -- a ratio for truncating the non-distinguishing attributes, suggested value 0.05
+--est_dup  ALIAS FOR $2; -- estimated probability that a pair is duplicates , suggested value 0.002
+--bins_count ALIAS FOR $3; -- number of bins per attribute, suggested value 3-5
+--rel_perf_threshold ALIAS FOR $4; -- suggested value 1000. Decrease the value to get better recall but worse performance
+--abs_perf_threshold ALIAS FOR $5; -- suggested value 0.2. Decrease the value to get better recall but worse performance.
 
-DROP TABLE IF EXISTS training_clustering CASCADE;
-CREATE TABLE training_clustering (local_entity_id integer, global_entity_id integer);
-
-
-DROP TABLE IF EXISTS global_attrs_types_thr CASCADE;
-CREATE TABLE global_attrs_types_thr(tag_id integer, tag_code text, type text, threshold double precision);
-CREATE INDEX global_attrs_types_thr__tag_id ON global_attrs_types_thr(tag_id);
-
--- we don't need the tag_code, but it's here to make it more readable
-TRUNCATE global_attrs_types_thr;
-INSERT INTO global_attrs_types_thr(tag_id, tag_code, type) values
-(1, 'LOC1.FULL_ADDRESS', 'TEXT'),
-(2, 'LOC1.ADDRESS', 'TEXT'),
-(3, 'LOC1.ADDRESS_2', 'TEXT'),
-(4, 'LOC1.CITY', 'TEXT'),
-(5, 'LOC1.STATE', 'TEXT'),
-(6, 'LOC1.ZIP', 'TEXT'),
-(7, 'LOC1.COUNTY', 'TEXT'),
-(25, 'CALL_TO_ACTION_URL', 'TEXT'),
-(26, 'TITLE', 'TEXT'),
-(27, 'DESCRIPTION', 'TEXT'),
-(28, 'IMAGE1', 'TEXT'),
-(29, 'IMAGE2', 'TEXT'),
-(36, 'LOC1.LAT', 'REAL'),
-(37, 'LOC1.LON', 'REAL'),
-(42, 'PRICE_RANGE', 'TEXT'),
-(47, 'PHONE', 'TEXT'),
-(48, 'RATING', 'TEXT'),
-(55, 'EMAIL', 'TEXT'),
-(56, 'WEBSITE', 'TEXT'),
-(57, 'HOURS', 'TEXT'),
-(58, 'DURATION', 'TEXT'),
-(59, 'DIRECTIONS', 'TEXT'),
-(70, 'VENUE_NAME', 'TEXT'),
-(73, 'REVIEWS', 'TEXT'),
-(76, 'TOTAL_NUMBER_OF_RATINGS', 'REAL'),
-(null, 'LATITUDE', 'REAL'),
-(null, 'LONGITUDE', 'REAL'),
-(null, 'LOC1.COUNTRY', 'TEXT'),
-(null, 'COUNTY', 'TEXT'),
-(null, 'ZIP', 'TEXT'),
-(null, 'CITY', 'TEXT');
 
 
 -- End input/output tables

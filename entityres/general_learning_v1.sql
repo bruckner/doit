@@ -74,7 +74,7 @@ TRUNCATE duplicate_pairs;
 --add duplciates from goby clustering
 INSERT INTO duplicate_pairs 
 select la.id, lb.id 
-from goby_entity_result a, goby_entity_result b , local_entities la, local_entities lb
+from public.goby_entity_result a, public.goby_entity_result b , local_entities la, local_entities lb
 where a.global_entity_id = b.global_entity_id
 AND a.local_entity_id = la.local_id::integer AND b.local_entity_id = lb.local_id::integer
 AND la.id < lb.id 

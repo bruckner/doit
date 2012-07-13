@@ -6,7 +6,7 @@ CREATE OR REPLACE FUNCTION multiply_aggregate(double precision,double precision)
 CREATE AGGREGATE product (basetype=double precision, sfunc=multiply_aggregate, stype=double precision,
 initcond=1 ) ;
 
-CREATE OR REPLACE FUNCTION to_num(v_input text)
+CREATE OR REPLACE FUNCTION to_num_besk(v_input text)
 RETURNS REAL AS $$
 DECLARE v_int_value REAL DEFAULT NULL;
 BEGIN
@@ -141,9 +141,9 @@ CREATE VIEW tag_values_count AS
 	FROM data_from_new_source
 	GROUP BY tag_id, value;
 
-DROP TABLE IF EXISTS qgrams_idf CASCADE;
-CREATE TABLE qgrams_idf(tag_id integer, qgram text, doc_count integer);
-CREATE INDEX qgrams_idf__tag_id_qgram ON qgrams_idf(tag_id, qgram);
+DROP TABLE IF EXISTS dedup_qgrams_idf CASCADE;
+CREATE TABLE dedup_qgrams_idf(tag_id integer, qgram text, doc_count integer);
+CREATE INDEX dedup_qgrams_idf__tag_id_qgram ON dedup_qgrams_idf(tag_id, qgram);
 
 DROP TABLE IF EXISTS similarity_2way_join_result CASCADE;
 CREATE TABLE similarity_2way_join_result(cluster1_id integer, cluster2_id integer, entity1_id integer, entity2_id integer, m_prob double precision, prob_s_m double precision, prob_s_u double precision);
@@ -271,15 +271,15 @@ RAISE INFO 'Constructed all q-grams for the new data';
 
 DELETE FROM data_from_new_source_qgrams WHERE trim(qgram)='';
 
-UPDATE qgrams_idf a
+UPDATE dedup_qgrams_idf a
 SET doc_count = a.doc_count + b.doc_count
 FROM (SELECT tag_id, qgram , count(distinct entity_id) as doc_count FROM data_from_new_source_qgrams group by tag_id, qgram) b
 WHERE a.tag_id= b.tag_id AND a.qgram = b.qgram;
 
-INSERT INTO qgrams_idf(tag_id, qgram, doc_count)
+INSERT INTO dedup_qgrams_idf(tag_id, qgram, doc_count)
 SELECT tag_id, qgram , count(distinct entity_id) as doc_count 
 FROM data_from_new_source_qgrams
-WHERE (tag_id,qgram) not in (select tag_id, qgram FROM qgrams_idf)
+WHERE (tag_id,qgram) not in (select tag_id, qgram FROM dedup_qgrams_idf)
 GROUP BY tag_id,qgram;
 
 
@@ -287,13 +287,13 @@ GROUP BY tag_id,qgram;
 DELETE FROM data_from_new_source_qgrams
 WHERE (tag_id, qgram) IN (
 SELECT q.tag_id, qgram
-FROM qgrams_idf q, tag_frequency t
+FROM dedup_qgrams_idf q, tag_frequency t
 WHERE q.tag_id = t.tag_id AND q.doc_count::double precision/t.tuples_count > 0.1);
 
 -- update the freq of qgrams by multiplying by the idf
 UPDATE data_from_new_source_qgrams d
 SET freq = freq * log(t.tuples_count::double precision / q.doc_count)
-FROM qgrams_idf q, tag_frequency t
+FROM dedup_qgrams_idf q, tag_frequency t
 WHERE d.tag_id=q.tag_id AND d.qgram=q.qgram AND q.tag_id = t.tag_id;
 
 --update the norm
@@ -307,9 +307,9 @@ WHERE agg.entity_id = d.entity_id AND agg.tag_id = d.tag_id;
 
 
 INSERT INTO data_from_new_source_real(entity_id, cluster_id, tag_id, value)
-SELECT entity_id, cluster_id, d.tag_id, to_num(value)
+SELECT entity_id, cluster_id, d.tag_id, to_num_besk(value)
 FROM data_from_new_source d, global_attrs_types_thr f
-WHERE d.tag_id = f.tag_id AND f.type='REAL' AND to_num(value) is not null;
+WHERE d.tag_id = f.tag_id AND f.type='REAL' AND to_num_besk(value) is not null;
 
 END;
 $$ LANGUAGE plpgsql;
@@ -672,7 +672,7 @@ TRUNCATE inserted_data_qgrams;
 TRUNCATE inserted_data_real;
 TRUNCATE tag_values_frequency;
 TRUNCATE tag_frequency;
-TRUNCATE qgrams_idf;
+TRUNCATE dedup_qgrams_idf;
 
 END;
 $$ LANGUAGE plpgsql;
