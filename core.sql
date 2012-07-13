@@ -23,7 +23,8 @@
 CREATE TABLE local_sources (
 	id serial,
 	local_id text,
-        n_entities INTEGER
+    n_entities INTEGER,
+    date_added TIMESTAMP
 );
 
 CREATE TABLE local_source_meta (
@@ -39,10 +40,10 @@ CREATE TABLE local_fields (
 	local_name TEXT,
 	local_desc TEXT,
 	display_order INTEGER,
-        n_values INTEGER,
-        n_distinct INTEGER,
-        avg_val_len FLOAT,
-        sort_factor FLOAT
+    n_values INTEGER,
+    n_distinct INTEGER,
+    avg_val_len FLOAT,
+    sort_factor FLOAT
 );
 
 CREATE TABLE local_field_meta (
@@ -52,9 +53,10 @@ CREATE TABLE local_field_meta (
 );
 
 CREATE TABLE local_entities (
-	id serial,
-	source_id int,
-	local_id text
+	id SERIAL,
+	source_id INTEGER,
+    category_id INTEGER,
+	local_id TEXT
 );
 
 CREATE TABLE local_data (
@@ -70,6 +72,12 @@ CREATE TABLE global_data (
        att_id INTEGER,
        value TEXT,
        n INTEGER
+);
+
+CREATE TABLE global_synonyms (
+        att_id INTEGER,
+        value_a TEXT,
+        value_b TEXT
 );
 
 
@@ -212,6 +220,7 @@ BEGIN
   PERFORM unload_local();
   DELETE FROM global_attributes;
   DELETE FROM attribute_mappings;
+  DELETE FROM global_data;
   PERFORM nr_clean();
 END
 $$ LANGUAGE plpgsql;
@@ -222,6 +231,7 @@ $$ LANGUAGE plpgsql;
 DROP TABLE IF EXISTS global_attributes CASCADE;
 DROP TABLE IF EXISTS attribute_mappings CASCADE;
 DROP TABLE IF EXISTS integration_methods CASCADE;
+DROP TABLE IF EXISTS configuration_properties CASCADE;
 
 CREATE TABLE global_attributes (
        id serial,
@@ -229,7 +239,9 @@ CREATE TABLE global_attributes (
        external_id text,
        derived_from text,
        n_sources INTEGER,
-       probability FLOAT
+       probability FLOAT,
+       type text default 'TEXT',
+       threshold double precision default null
 );
 
 CREATE TABLE attribute_mappings (
@@ -278,6 +290,13 @@ CREATE TABLE integration_methods (
 	method_name text,
 	active boolean,
 	weight float
+);
+
+CREATE TABLE configuration_properties(
+    name TEXT,
+    description TEXT,
+    module TEXT DEFAULT 'dedup',
+    value TEXT
 );
 
 INSERT INTO integration_methods (method_name, active, weight)
