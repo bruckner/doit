@@ -1,0 +1,205 @@
+{% extends "tamer/console.html" %}
+
+{% comment %}
+Copyright (c) 2011 Massachusetts Institute of Technology
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+{% endcomment %}
+
+
+{% block styles %}
+{{ block.super }}
+<style>
+fieldset {
+    margin: 0.5em 1em;
+}
+fieldset div {
+    padding: 4px;
+}
+.attr-selector {
+    margin: 1em;
+    padding: 1em;
+}
+.attr-selector fieldset {
+    margin: 1em;
+}
+.attr-selector td {
+    padding: 6px;
+}
+</style>
+{% endblock styles %}
+
+
+{% block layout-top %}
+<div class="tamer-console-head">Data Tamer</div>
+{% endblock layout-top %}
+
+
+{% block layout-right %}
+<div>
+  {% if object == 'source' %}
+  <form class="tamer-import-form" action="import-table" method="POST">
+    <fieldset>
+      <legend>Import a Data Source from a PostgreSQL Table</legend>
+      <div>
+        <label>Select a table to import:</label>
+        <select class="table-selector">
+          <option selected="selected"></option>
+          {% for t in tables %}
+          <option>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="attr-selector"></div>
+      <div>
+        <input type="submit" value="Import table..." disabled="disabled"></input>
+        <span style="margin-left:1em;" class="import-status"></span>
+      </div>
+      <input type="hidden" name="schemaname" value="{{ schemaname }}"></input>
+    </fieldset>
+  </form>
+  {% endif %}{% if object == 'schema' %}
+  <form class="tamer-import-aux-form" action="import-auxiliary" method="POST">
+    <fieldset>
+      <legend>Import the Schema of a New Global Table</legend>
+      <div>
+        <div>
+          <label>Name for the new Global Table:</label>
+          <input type="text" name="newrelationname"></input>
+        </div>
+        <label>Select a table to import:</label>
+        <select class="table-selector" name="tablename">
+          <option selected="selected"></option>
+          {% for t in tables %}
+          <option>{{ t }}</option>
+          {% endfor %}
+        </select>
+        <div>
+          <label>Select the column with attribute names to import:</label>
+          <div class="attr-radio" name="columnname"></div>
+        </div>
+        <div>
+          <input type="submit" value="Import table..." disabled="disabled"></input>
+          <span style="margin-left:1em;" class="import-status"></span>
+        </div>
+      </div>
+      <input type="hidden" name="schemaname" value="{{ schemaname }}"></input>
+      <input type="hidden" name="object" value="schema"></input>
+    </fieldset>
+  </form>
+  {% endif %}{% if object == 'template' %}
+  <form class="tamer-import-aux-form" action="import-auxiliary" method="POST">
+    <fieldset>
+      <legend>Import an Attribute Template</legend>
+      <div>
+        <div>
+          <label>Name the new template:</label>
+          <input type="text" name="templatename"></input>
+        </div>
+        <label>Select a table to import:</label>
+        <select class="table-selector" name="tablename">
+          <option selected="selected"></option>
+          {% for t in tables %}
+          <option>{{ t }}</option>
+          {% endfor %}
+        </select>
+        <div class="attr-radio" name="columnname"></div>
+        <div>
+          <input type="submit" value="Import table..." disabled="disabled"></input>
+          <span style="margin-left:1em;" class="import-status"></span>
+        </div>
+      </div>
+      <input type="hidden" name="schemaname" value="{{ schemaname }}"></input>
+      <input type="hidden" name="object" value="template"></input>
+    </fieldset>
+  </form>
+  {% endif %}{% if object == 'attdict' %}
+  <form class="tamer-import-aux-form" action="import-auxiliary" method="POST">
+    <fieldset>
+      <legend>Import an Attribute Dictionary</legend>
+      <div>
+        <div>
+          <label>Choose a global attribute to import a dictionary for:</label>
+          <select class="global-attribute-selector" name="attribute">
+            {% for a in global_attributes %}
+            <option>{{ a }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <label>Select a table to import:</label>
+        <select class="table-selector" name="tablename">
+          <option selected="selected"></option>
+          {% for t in tables %}
+          <option>{{ t }}</option>
+          {% endfor %}
+        </select>
+        <div class="attr-radio" name="columnname"></div>
+        <div>
+          <input type="submit" value="Import table..." disabled="disabled"></input>
+          <span style="margin-left:1em;" class="import-status"></span>
+        </div>
+      </div>
+      <input type="hidden" name="schemaname" value="{{ schemaname }}"></input>
+      <input type="hidden" name="object" value="attdict"></input>
+    </fieldset>
+  </form>
+  {% endif %}{% if object == 'syndict' %}
+  <form class="tamer-import-aux-form" action="import-auxiliary" method="POST">
+    <fieldset>
+      <legend>Import a Dictionary of Synonyms</legend>
+      <div>
+        <div>
+          <label>Choose a global attribute to import a dictionary for:</label>
+          <select class="global-attribute-selector" name="attribute">
+            {% for a in global_attributes %}
+            <option>{{ a }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <label>Select a table to import:</label>
+        <select class="table-selector" name="tablename">
+          <option selected="selected"></option>
+          {% for t in tables %}
+          <option>{{ t }}</option>
+          {% endfor %}
+        </select>
+        <br/>
+        <label>Column A</label>
+        <div class="attr-radio" name="columna"></div>
+        <label>Column B</label>
+        <div class="attr-radio" name="columnb"></div>
+        <div>
+          <input type="submit" value="Import table..." disabled="disabled"></input>
+          <span style="margin-left:1em;" class="import-status"></span>
+        </div>
+      </div>
+      <input type="hidden" name="schemaname" value="{{ schemaname }}"></input>
+      <input type="hidden" name="object" value="syndict"></input>
+    </fieldset>
+  </form>
+  {% endif %}
+</div>
+{% endblock layout-right %}
+
+
+{% block layout-bottom %}{% endblock layout-bottom %}
+
+
+{% block jquery %}
+{{ block.super }}
+{% endblock jquery %}

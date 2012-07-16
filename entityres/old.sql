@@ -61,14 +61,15 @@
 CREATE OR REPLACE FUNCTION entities_clean () RETURNS VOID AS
 $$
 BEGIN
-  DROP TABLE entity_tokens CASCADE;
-  DROP TABLE entity_field_norms CASCADE;
-  DROP TABLE entity_field_cosine_similaries CASCADE;
-  DROP TABLE entity_similarities CASCADE;
-  DROP TABLE entity_field_weights CASCADE;
-  DROP TABLE entity_test_group CASCADE;
+  TRUNCATE entity_tokens CASCADE;
+  TRUNCATE entity_field_norms CASCADE;
+  TRUNCATE entity_field_cosine_similarities CASCADE;
+  TRUNCATE entity_similarities CASCADE;
+  TRUNCATE entity_field_weights CASCADE;
+  TRUNCATE entity_test_group CASCADE;
 END
 $$ LANGUAGE plpgsql;
+
 
 
 /* Attribute-wise cosine similarity relations */
@@ -111,6 +112,7 @@ CREATE TABLE entity_similarities (
 /* Regression weights */
 CREATE TABLE entity_field_weights (
         field_id INTEGER,
+        initial_bias FLOAT,
         weight FLOAT
 );
 
@@ -167,9 +169,10 @@ BEGIN
   ANALYZE entity_test_group; /* Make sure planner gets good statistics */
 
   CREATE TEMP TABLE entity_test_data AS
-       SELECT entity_id, field_id, value
-         FROM local_data
+       SELECT entity_id, global_id field_id, value
+         FROM local_data d, attribute_mappings m
         WHERE entity_id IN (SELECT * FROM entity_test_group)
+          AND d.field_id = m.local_id
           AND value IS NOT NULL AND value != '';
   RAISE INFO 'Got data.';
 
@@ -203,8 +206,6 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION entities_weights_from_test_group () RETURNS VOID AS
 $$
 BEGIN
-  TRUNCATE entity_field_weights;
-
   /* Test group gives list of entities. Training pairs are the
    * cross product of test group with itself, i.e., every test
    * entity paired with every other test entity.
@@ -237,9 +238,10 @@ BEGIN
      SET avg_match = sum_match::FLOAT / n_match,
          avg_mismatch = sum_mismatch::FLOAT / n_mismatch;
 
-  INSERT INTO entity_field_weights
-       SELECT field_id, entities_weight_formula(avg_match, avg_mismatch)
-         FROM training_stats;
+  UPDATE entity_field_weights w
+     SET weight = (initial_bias * GREATEST(100 - n_match, 0) / 100) + entities_weight_formula(avg_match, avg_mismatch) * LEAST(n_match, 100) / 100
+    FROM training_stats s
+   WHERE w.field_id = s.field_id;
 
   DROP TABLE training_pairs;
   DROP TABLE training_stats;

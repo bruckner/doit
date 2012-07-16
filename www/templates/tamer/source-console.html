@@ -1,0 +1,145 @@
+{% extends "tamer/console.html" %}
+
+{% comment %}
+Copyright (c) 2011 Massachusetts Institute of Technology
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+{% endcomment %}
+
+
+{% block styles %}
+{{ block.super }}
+<style>
+.source-status table {
+    margin: 1em 2em;
+    padding: 6px;
+    border: 1px solid #888;
+    border-collapse: collapse;
+}
+.source-status td, .source-status th {
+    padding: 6px;
+    border: 1px solid #888;
+}
+.source-controls div {
+    margin-bottom: 0.5em;
+}
+.source-controls table {
+    margin: 1em 2em;
+    border: 1px solid #888;
+    border-collapse: collapse;
+}
+.source-controls td, .source-controls th {
+    text-align: left;
+    border: 1px solid #888;
+    padding: 6px;
+}
+.source-controls input {
+    margin-left: 1em;
+    padding: 6px;
+}
+.tab-bar table {
+    border-bottom: 1px solid black;
+    border-collapse: collapse;
+}
+.tab-bar th {
+    padding: 8px 16px;
+    font-size: 14pt;
+    color: black;
+}
+.tabbed {
+    border-bottom: 1px solid white;;
+    border-top: 1px solid black;
+    border-left: 1px solid black;
+    border-right: 1px solid black;
+}
+.tab-bar a {
+    text-decoration: none;
+}
+</style>
+{% endblock styles %}
+
+
+{% block layout-top %}
+<div class="tamer-console-head">Data Tamer</div>
+{% endblock layout-top %}
+
+
+{% block layout-right %}
+<div class="tamer-source-console">
+  <!--<div class="tab-bar">
+    <table>
+      <tr>
+        <th style="width:2em;"></th>
+        <th {% if tab == "0" %}class="tabbed"{% endif %}><a href="?tab=0">Summary</a></th>
+        <th {% if tab == "1" %}class="tabbed"{% endif %}><a href="?tab=1">Schema</a></th>
+        <th {% if tab == "2" %}class="tabbed"{% endif %}><a href="?tab=2">Data</a></th>
+        <th {% if tab == "3" %}class="tabbed"{% endif %}><a href="?tab=3">Preview</a></th>
+        <th style="width:2em;"></th>
+      </tr>
+    </table>
+  </div>-->
+  <div class="source-status">
+    <h3>Source "{{ source.name }}" status</h3>
+    <table>
+      <tr>
+        <th>Entities loaded</th>
+        <th>Columns loaded</th>
+        <th>Columns mapped</th>
+        <th>Duplicates found</th>
+      </tr>
+      <tr>
+        <td>{{ source.stats.nent }}</td>
+        <td>{{ source.stats.ncol }}</td>
+        <td>{{ source.stats.nmap }}</td>
+        <td>{{ source.stats.ndup }}</td>
+      </tr>
+    </table>
+  </div>
+  <div class="source-controls">
+    <div>
+      <h3>Actions for source "{{ source.name }}"</h3>
+      <table style="">
+        {% for actionset in actionsets %}
+        <tr>
+          <th colspan=3>{{ actionset.header }}</th>
+        </tr>
+        {% for action in actionset.actions %}
+        <tr>
+          <td>{{ action.description }}</td>
+          <td>{{ action.status }}</td>
+          <td>
+            <form class="tamer-source-action-form" action="{{ action.target }}" method="POST">
+              <input type="submit" value="{{ action.button }}" {{ action.disabled }}></input>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+  <div class="source-data"></div>
+</div>
+{% endblock layout-right %}
+
+{% block layout-bottom %}{% endblock layout-bottom %}
+
+
+{% block jquery %}
+{{ block.super }}
+{% endblock jquery %}

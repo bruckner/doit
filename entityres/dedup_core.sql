@@ -19,13 +19,15 @@
  * SOFTWARE.
  */
 
-INSERT INTO configuration_properties (name, value, description) 
-     VALUES ('prob_dist_threshold', 0.05, 'Probability Distribution Threshold'),
-            ('est_dup', 0.00001, 'Estimated Duplicate Rate'),
-            ('bins_count', 5, 'Feature Bins'),
-            ('rel_perf_threshold', 500, NULL),
-            ('abs_perf_threshold', 0.2, NULL),
-            ('truncate_threshold', 0.95, NULL);
+TRUNCATE configuration_properties;
+INSERT INTO configuration_properties (name, value) VALUES 
+('prob_dist_threshold',0.05), 
+('est_dup', 0.00001), 
+('bins_count',3), 
+('rel_perf_threshold',500), 
+('abs_perf_threshold', 0.2), 
+('truncate_threshold',0.95),
+('question_budget', 50);
 
 --prob_dist_threshold ALIAS FOR $1; -- a ratio for truncating the non-distinguishing attributes, suggested value 0.05
 --est_dup  ALIAS FOR $2; -- estimated probability that a pair is duplicates , suggested value 0.002

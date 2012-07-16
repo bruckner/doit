@@ -6,7 +6,7 @@ CREATE OR REPLACE FUNCTION multiply_aggregate(double precision,double precision)
 CREATE AGGREGATE product (basetype=double precision, sfunc=multiply_aggregate, stype=double precision,
 initcond=1 ) ;
 
-CREATE OR REPLACE FUNCTION to_num_besk(v_input text)
+CREATE OR REPLACE FUNCTION to_num(v_input text)
 RETURNS REAL AS $$
 DECLARE v_int_value REAL DEFAULT NULL;
 BEGIN
@@ -78,13 +78,18 @@ CREATE INDEX inserted_data_real__value_tag_id ON inserted_data_real(value, tag_i
 DROP TABLE IF EXISTS entity_clustering CASCADE;
 CREATE TABLE entity_clustering(entity_id integer, cluster_id integer);
 
-DROP VIEW IF EXISTS similarity_self_join_qrams CASCADE;
+DROP TABLE IF EXISTS similarity_self_join_qrams CASCADE;
 CREATE TABLE similarity_self_join_qrams (entity1_id integer, entity2_id integer, tag_id integer, cos_sim double precision);
 
 DROP TABLE IF EXISTS similarity_self_join_result CASCADE;
 CREATE TABLE similarity_self_join_result(entity1_id integer, entity2_id integer, m_prob double precision, prob_s_m double precision, prob_s_u double precision);
 CREATE INDEX similarity_self_join_result__entity1_id ON similarity_self_join_result(entity1_id);
 CREATE INDEX similarity_self_join_result__entity2_id ON similarity_self_join_result(entity2_id);
+
+
+DROP TABLE IF EXISTS similarity_self_join_copy CASCADE;
+CREATE TABLE similarity_self_join_copy(entity1_id integer, entity2_id integer, m_prob double precision);
+
 
 DROP TABLE IF EXISTS similarity_self_join_result_tmp CASCADE;
 CREATE TABLE similarity_self_join_result_tmp(entity1_id integer, entity2_id integer);
@@ -143,7 +148,7 @@ CREATE VIEW tag_values_count AS
 
 DROP TABLE IF EXISTS dedup_qgrams_idf CASCADE;
 CREATE TABLE dedup_qgrams_idf(tag_id integer, qgram text, doc_count integer);
-CREATE INDEX dedup_qgrams_idf__tag_id_qgram ON dedup_qgrams_idf(tag_id, qgram);
+CREATE INDEX qgrams_idf__tag_id_qgram ON dedup_qgrams_idf(tag_id, qgram);
 
 DROP TABLE IF EXISTS similarity_2way_join_result CASCADE;
 CREATE TABLE similarity_2way_join_result(cluster1_id integer, cluster2_id integer, entity1_id integer, entity2_id integer, m_prob double precision, prob_s_m double precision, prob_s_u double precision);
@@ -181,23 +186,52 @@ CREATE TABLE match_cluster (cluster1_id integer, cluster2_id integer);
 ----------------- function definitions--------------------------
 
 -- add a new source. The paramter is the source_id
-CREATE OR REPLACE FUNCTION add_source_id(integer, real, real) RETURNS void AS
+CREATE OR REPLACE FUNCTION add_source_id(new_source_id integer) RETURNS void AS
 $$
-DECLARE
-  new_source_id ALIAS FOR $1;
-  threshold ALIAS for $2;
-  prob_m ALIAS for $3;
+DECLARE    
 BEGIN
 
+
+
 select extract_new_data(new_source_id, true);
-select self_join(prob_m);
-select cluster(threshold, prob_m);
-select two_way_join(prob_m);
-select incr_cluster(threshold);
+select self_join();
+select cluster();
+select two_way_join();
+select incr_cluster();
 
 END;
 $$ LANGUAGE plpgsql;
 
+
+CREATE OR REPLACE FUNCTION set_global_attr_types() RETURNS void AS
+$$
+DECLARE  
+attr RECORD;
+BEGIN
+
+DROP TABLE IF EXISTS value_sample;
+CREATE TEMP TABLE value_sample(value text);
+
+FOR attr in select * from global_attributes LOOP
+
+TRUNCATE value_sample;
+
+INSERT INTO value_sample 
+SELECT d.value
+FROM local_data d, attribute_mappings m
+WHERE d.value is not NULL AND m.local_id = d.field_id AND m.global_id = attr.id
+LIMIT 100000;
+
+IF (select count(value) from value_sample) > 0 and (select count(to_num(value)) from value_sample)::real / (select count(value) from value_sample) > 0.9 THEN
+UPDATE global_attributes SET type = 'REAL'
+WHERE id = attr.id;
+END IF;
+
+END LOOP;
+DROP TABLE value_sample;
+
+END;
+$$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION extract_new_data(integer, bool) RETURNS void AS
 $$
@@ -208,8 +242,9 @@ DECLARE
 BEGIN
 
 --update the tag_id's
-UPDATE global_attrs_types_thr a
-SET tag_id = (select id from global_attributes b where b.name = a.tag_code);
+
+
+perform set_global_attr_types();
 
 -- extract all entities an their attributes that belong to the passes source_id
 IF (truncate_current_temp_data) THEN
@@ -263,8 +298,8 @@ WHERE d.tag_id = tf.tag_id AND d.tag_id = tvf.tag_id AND d.value = tvf.value AND
 
 INSERT INTO data_from_new_source_qgrams(entity_id, cluster_id, tag_id, qgram, freq)
 SELECT entity_id, cluster_id, d.tag_id, tokenize_besk(value) as qgram, count(*) as freq
-FROM data_from_new_source d, global_attrs_types_thr f
-WHERE d.tag_id = f.tag_id AND f.type = 'TEXT'
+FROM data_from_new_source d, global_attributes f
+WHERE d.tag_id = f.id AND f.type = 'TEXT'
 GROUP BY entity_id, cluster_id, d.tag_id, qgram;
 
 RAISE INFO 'Constructed all q-grams for the new data';
@@ -307,23 +342,24 @@ WHERE agg.entity_id = d.entity_id AND agg.tag_id = d.tag_id;
 
 
 INSERT INTO data_from_new_source_real(entity_id, cluster_id, tag_id, value)
-SELECT entity_id, cluster_id, d.tag_id, to_num_besk(value)
-FROM data_from_new_source d, global_attrs_types_thr f
-WHERE d.tag_id = f.tag_id AND f.type='REAL' AND to_num_besk(value) is not null;
+SELECT entity_id, cluster_id, d.tag_id, to_num(value)
+FROM data_from_new_source d, global_attributes f
+WHERE d.tag_id = f.id AND f.type='REAL' AND to_num(value) is not null;
 
 END;
 $$ LANGUAGE plpgsql;
 
 
-CREATE OR REPLACE FUNCTION self_join(real) RETURNS void AS
+CREATE OR REPLACE FUNCTION self_join() RETURNS void AS
 $$
 DECLARE
-  est_dup ALIAS for $1; -- estimated probability that a pair is duplicates , suggested value 0.002, should be the same as the value used for learning weights
+  est_dup double precision;
   updated_entities_count integer;	
   null_prod_m double precision;
   null_prod_u double precision;
 BEGIN
 
+est_dup := (select to_num(value) from configuration_properties where name='est_dup');
 
 DELETE FROM data_from_new_source_qgrams
 WHERE tag_id not in (SELECT tag_id FROM features);
@@ -347,8 +383,8 @@ SET enable_mergejoin TO OFF;
 TRUNCATE candidate_pairs;	
 INSERT INTO candidate_pairs
 	SELECT distinct a.entity_id, b.entity_id
-	FROM data_from_new_source_qgrams a, data_from_new_source_qgrams b, global_attrs_types_thr f
-	WHERE a.tag_id = b.tag_id AND a.entity_id < b.entity_id AND a.qgram=b.qgram AND a.tag_id = f.tag_id
+	FROM data_from_new_source_qgrams a, data_from_new_source_qgrams b, global_attributes f
+	WHERE a.tag_id = b.tag_id AND a.entity_id < b.entity_id AND a.qgram=b.qgram AND a.tag_id = f.id
 	GROUP BY a.entity_id, b.entity_id, a.tag_id, f.threshold
 	HAVING  sum(a.freq*b.freq)/max(a.qgram_norm)/max(b.qgram_norm) >= f.threshold;
 	
@@ -361,8 +397,8 @@ RAISE INFO 'Q-gram join done. Timestamp : %', (select timeofday()) ;
 -- remember, f.threshold is a negative value 
 INSERT INTO candidate_pairs
 SELECT distinct a.entity_id, b.entity_id
-FROM data_from_new_source_real a, data_from_new_source_real b, global_attrs_types_thr f
-WHERE a.entity_id < b.entity_id AND f.threshold is not null AND a.tag_id=b.tag_id AND a.tag_id=f.tag_id AND a.value BETWEEN b.value + f.threshold AND b.value - f.threshold 
+FROM data_from_new_source_real a, data_from_new_source_real b, global_attributes f
+WHERE a.entity_id < b.entity_id AND f.threshold is not null AND a.tag_id=b.tag_id AND a.tag_id=f.id AND a.value BETWEEN b.value + f.threshold AND b.value - f.threshold 
 	AND b.value BETWEEN a.value + f.threshold AND a.value - f.threshold;
 
 RAISE INFO 'Real-based candidate pairs obtained. Timestamp : %', (select timeofday()) ;
@@ -421,19 +457,26 @@ UPDATE similarity_self_join_result
 SET m_prob = prob_s_m / (prob_s_m + prob_s_u)
 WHERE prob_s_m >0 OR prob_s_u >0;
 
+TRUNCATE similarity_self_join_copy;
+INSERT INTO similarity_self_join_copy
+SELECT entity1_id, entity2_id, m_prob
+FROM similarity_self_join_result;
+
+
 RAISE INFO 'Self-join done. Timestamp : %', (select timeofday()) ;
 END;
 $$ LANGUAGE plpgsql;
 
 
-CREATE OR REPLACE FUNCTION cluster(real) RETURNS void AS
+CREATE OR REPLACE FUNCTION cluster() RETURNS void AS
 $$
 DECLARE
-  prob_threshold ALIAS for $1;  
+  prob_threshold double precision;
   updated_entities_count integer;	
   
 BEGIN
 
+prob_threshold := (select to_num(value) from configuration_properties where name='truncate_threshold');
 
 -- truncate pairs with prob(M) < threshold; default should be above 0.5
 DELETE FROM similarity_self_join_result
@@ -489,13 +532,15 @@ $$ LANGUAGE plpgsql;
 
 
 
-CREATE OR REPLACE FUNCTION two_way_join(real) RETURNS void AS
+CREATE OR REPLACE FUNCTION two_way_join() RETURNS void AS
 $$
 DECLARE
-  est_dup ALIAS for $1; -- estimated probability that a pair is duplicates , suggested value 0.002, should be the same as the value used for learning weights  
+  est_dup double precision;
   null_prod_m double precision;
   null_prod_u double precision;
 BEGIN
+
+est_dup := (select to_num(value) from configuration_properties where name='est_dup');
 
 RAISE INFO 'Starting similarity-join..';
 
@@ -505,8 +550,8 @@ SET enable_mergejoin TO OFF;
 TRUNCATE candidate_pairs_2way;	
 INSERT INTO candidate_pairs_2way
 	SELECT distinct a.entity_id, a.cluster_id, b.entity_id, b.cluster_id
-	FROM data_from_new_source_qgrams a, inserted_data_qgrams b, global_attrs_types_thr f
-	WHERE a.tag_id = b.tag_id AND a.qgram=b.qgram AND a.tag_id = f.tag_id
+	FROM data_from_new_source_qgrams a, inserted_data_qgrams b, global_attributes f
+	WHERE a.tag_id = b.tag_id AND a.qgram=b.qgram AND a.tag_id = f.id
 	GROUP BY a.entity_id, a.cluster_id, b.entity_id, b.cluster_id, a.tag_id, f.threshold
 	HAVING  sum(a.freq*b.freq)/max(a.qgram_norm)/max(b.qgram_norm) >= f.threshold;
 	
@@ -517,8 +562,8 @@ RAISE INFO 'Q-gram join done. Timestamp : %', (select timeofday()) ;
 
 INSERT INTO candidate_pairs_2way
 SELECT distinct a.entity_id, a.cluster_id, b.entity_id , b.cluster_id
-FROM data_from_new_source_real a, inserted_data_real b, global_attrs_types_thr f
-WHERE f.threshold is not null AND a.tag_id=b.tag_id AND a.tag_id=f.tag_id AND a.value BETWEEN b.value + f.threshold AND b.value - f.threshold 
+FROM data_from_new_source_real a, inserted_data_real b, global_attributes f
+WHERE f.threshold is not null AND a.tag_id=b.tag_id AND a.tag_id=f.id AND a.value BETWEEN b.value + f.threshold AND b.value - f.threshold 
 	AND b.value BETWEEN a.value + f.threshold AND a.value - f.threshold;
 
 RAISE INFO 'Real-based candidate pairs obtained. Timestamp : %', (select timeofday()) ;
@@ -589,12 +634,14 @@ RAISE INFO 'Two-way-join done. Timestamp : %', (select timeofday()) ;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION incr_cluster(real) RETURNS void AS
+CREATE OR REPLACE FUNCTION incr_cluster() RETURNS void AS
 $$
 DECLARE
-  m_prob_threshold ALIAS FOR $1;  
+  m_prob_threshold double precision;
 BEGIN
-	
+
+m_prob_threshold := (select to_num(value) from configuration_properties where name='truncate_threshold');
+
 TRUNCATE similarity_cluster_join_result;
 INSERT INTO similarity_cluster_join_result 
 	SELECT cluster1_id, cluster2_id, sum(m_prob) / en.entity_count / eo.entity_count

@@ -1,0 +1,79 @@
+{% extends "tamer/console.html" %}
+
+{% comment %}
+Copyright (c) 2011 Massachusetts Institute of Technology
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+{% endcomment %}
+
+
+{% block styles %}
+{{ block.super }}
+<style>
+</style>
+{% endblock styles %}
+
+
+{% block layout-top %}
+<div class="tamer-console-head">Data Tamer</div>
+{% endblock layout-top %}
+
+
+{% block layout-right %}
+<form class="init-dedup-form" action="initialize-dedup-submit" method="POST">
+ <fieldset style="width:700px;">
+   <legend>Initialize De-duplication</legend>
+    <h4>To help jump-start the de-duplication model, would you suggest attributes that are especially useful for finding duplicates?</h4>
+    <div style="margin: 1em; width:700px;">
+      <span style="margin: 1em; cursor:pointer;">[X]</span>
+      <select name="important-0">
+        <option name="default"></option>
+        {% for a in attributes %}
+        <option name="{{ a.id }}">{{ a.name }}</option>
+        {% endfor %}
+      </select>
+      <span style="margin: 0 1em">is an important attribute, because it is:</span>
+      <input type="checkbox">Unique</input>
+      <input type="checkbox">Reliable</input>
+    </div>
+    <div style="padding: 1em;width: 700px; color: #888888; font-size: 10pt;">
+      <span>Note:  Important attributes are ones that are either mostly <em>unique</em>, i.e., only duplicate records would share a value in them, or mostly <em>reliable</em>, i.e., duplicate records should almost always share a value in the attribute.  An example of a <em>unique</em> attribute is the <em>latitude</em>e of a specific <em>place</em>.  An example of a <em>reliable</em> attribute is the <em>gender</em> of a <em>person</em>.  <em>Reliable</em> attributes have relatively clean, high quality data.</span>
+    </div>
+    <h4>Please also indicate any attributes that are not at all useful for finding duplicates:</h4>
+    <div style="margin: 1em; width:700px;">
+      <span style="margin: 1em; cursor:pointer;">[X]</span>
+      <select name="irrelevant-0">
+        <option name="default"></option>
+        {% for a in attributes %}
+        <option name="{{ a.id }}">{{ a.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <input type="submit" value="Continue"></input>
+    </div>
+  </fieldset>
+</form>
+{% endblock layout-right %}
+
+{% block layout-bottom %}{% endblock layout-bottom %}
+
+
+{% block jquery %}
+{{ block.super }}
+{% endblock jquery %}

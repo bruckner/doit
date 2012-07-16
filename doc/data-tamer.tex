@@ -1,0 +1,235 @@
+\documentclass[12pt]{article}
+\author{Daniel Bruckner}
+\title{Data Tamer System Documentation}
+\date{June 2012}
+
+\usepackage{hyperref}
+
+\usepackage[parfill]{parskip}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+
+\raggedright
+
+\section{Setup and Installation}
+
+\subsection{Hardware}
+
+Mostly depends on how much data you have.  Data Tamer especially likes more memory and more disks -- it tends to be space hungry because it maintains it's own copy of the data it analyzes.  At the moment, it runs as single-core.
+
+
+\subsection{Required Software}
+
+Data Tamer relies on a few software systems to run.  Here's the short story:
+
+\begin{itemize}
+\item Your favorite Linux distribution (Ubuntu 10.10 and later, and RHEL5 have been used successfully)
+\item PostgreSQL 8.4 or later
+\item Python 2.6 or later
+\item Django 1.2 or later
+\item (optional) Apache 2.2 or other web server
+\item (optional) MADlib 0.3 (a PostgreSQL library)
+\end{itemize}
+
+The somewhat longer story is that Data Tamer is primarily a database application coded for PostgreSQL running on Linux, with a Django web front end.  It hasn't been tested on Postgres earlier than 8.4 or Django earlier than 1.2.  It cannot run on Python earlier than 2.6, and mostly it's been run with 2.7.  Django comes with a built-in web server that is suitable for development and small demos, but for production it should be run through a real web server.
+
+All of these systems should be available as binary packages on most Linux distros.  On some Linux distros (e.g. RHEL5) the default Python package is less than 2.6.  In this case, you may have do some manual installation from source.  Source packages for all these systems are easy to find on the web.  Python should be compiled with the enable-shared-libs flag given to the configure command.  Be sure to install Django with the proper version of Python (2.6+).
+
+Postgres also uses Python as a procedural language through the plpythonu library.  This library can be added to a database with the SQL command \texttt{CREATE LANGUAGE plpythonu;}.  If Postgres was installed with a version of Python less than 2.6, you need to create the plpython shared library for a later version of Python.  To do this, compile Postgres from source with the \texttt{--with-python} and \texttt{PYTHON=/path/to/python2.6+} flags passed to configure.  After running make, there's no need to install, just move the new plpython2.so to Postgres's lib directory.  Detailed instructions can be found at \url{http://stackoverflow.com/questions/5921664/how-to-change-python-version-used-by-plpython-on-mac-osx}.
+
+MADlib is a library for running machine learning algorithms inside of Postgres.  We've experimented with it in Data Tamer, but it is not currently used by the core system.  Binary and source packages, as well as installation instructions and documentation, can be found at madlib.net.
+
+
+\subsection{Software Configuration}
+
+Clean installs of Postgres should be configured to take advantage of available resources -- the default configuration allocates something like 32KB for the buffer pool.  Some quick tips are set shared\_buffers to 1/4 available memory, set effective\_cache\_size to 1/2 to 3/4 available memory, set working\_mem to a few hundred MB.  Configuration variables are found in postgres.conf.  A detailed discussion of tuning Postgres can be found at \url{http://wiki.postgresql.org/wiki/Tuning\_Your\_PostgreSQL\_Server}
+
+
+\subsection{Installing Data Tamer}
+
+At the moment, Data Tamer is just a collection of scripts.  To install, get a copy of the source tree (from github.com/bruckner/doit or elsewhere), and put it in some directory that we'll call \texttt{\$DTHOME}.  A shell script installs Data Tamer in Postgres:
+
+run \texttt{\$DTHOME/init database-name}
+
+to install.  The init script should be run by an OS user with a linked (ident authentication, i.e., same name) Postgres super-user account.  It installs into this user's default schema, which can be set by:
+
+\texttt{ALTER USER mypgname SET search\_path = myschema;}
+
+The schema should be empty before an install.  \texttt{init} will print errors to the terminal, and a complete log is written to \texttt{\$DTHOME/init.out}.
+
+The Django application can be found in \texttt{\$DTHOME/www}.  Most likely, it will need some configuration to run.  The settings file can be found at \texttt{\$DTHOME/www/doitweb/settings.py}.  Settings that may need modification include \texttt{DATABASES}, the database connection parameters; \texttt{TEMPLATE\_DIRS}, should include \texttt{\$DTHOME/www/templates/}.
+
+The web server will also have to handle serving static files from \texttt{\$DTHOME/www/static}.  The web server can either serve these files directly or let Django do it (when using the Django built-in server, only the latter is possible).  If Django will be serving the static files, make sure settings.py contains the following:
+
+\begin{verbatim}
+STATIC_URL = '/static/'
+
+STATICFILES_DIRS = (
+    '/usca/home/bruckda1/doit/www/static/',
+)
+\end{verbatim}
+
+and that \texttt{INSTALLED\_APPS} includes \texttt{'django.contrib.staticfiles'}.
+
+
+\section{Using Data Tamer}
+
+\subsection{Importing Data}
+
+At the moment, loading data into Data Tamer is mostly a manual process.  Data assetes that can be loaded are:
+
+\begin{enumerate}
+\item Data sources to analyze
+\item Global schema information
+\item Training data, e.g., attribute mappings and entity clusterings
+\item Auxiliary tables like dictionaries and templates
+\end{enumerate}
+
+For all of these, the procedure is to load a table into the Postgres public schema (or some other non-Data Tamer schema) from CSV.  Then, write queries to copy data to the appropriate Data Tamer schema.  The relevant tables will be enumerated below; detailed information about them can be found in the section on Data Tamer internals.
+
+\subsubsection{Data Sources}
+
+Data sources are the data sets that Data Tamer is meant to clean and integrate.  Data tamer stores information about these sources in four tables: \texttt{local\_sources, local\_fields, local\_entities,} and \texttt{local\_data}.  (Definitions of all four can be found in \texttt{\$DTHOME/core.sql}.)
+
+If you consider a data source as a table, then \texttt{local\_sources} keeps information about the table as a whole, \texttt{local\_fields} about its columns, \texttt{local\_entities} about its rows, and \texttt{local\_data} about each of its non-null cell values.  Sources, fields, and entities each have an integer ID that is used as a foreign key and  that can either be serially generated by Postgres, or set via some external ID, as long as it's globally unique.
+
+Additional meta data about sources and columns can be stored in \texttt{local\_source\_meta} and \texttt{local\_field\_meta}.
+
+\subsubsection{Global Schema}
+
+Attributes in the global schema are stored in the table \texttt{global\_attributes} (defined in \texttt{\$DTHOME/core.sql}).  This table has an integer ID column that acts as a foreign key.  This can be assigned automatically in serial by Postgres, or set manually from an external unique ID.  External IDs can also be saved in the \texttt{external\_id} field.
+
+\subsubsection{Training Data}
+
+Data Tamer uses training data for its schema mapping model and for its entity resolution model.
+
+Training for the schema mapper is pairs of local and global fields, and should be loaded into the \texttt{attribute\_mappings} table (\texttt{\$DTHOME/core.sql}).  This table has fields for local and globals IDs that reference \texttt{local\_fields} and \texttt{global\_attributes} tables respectively.  It also has fields for the confidence and authority of mappings (1.0 = perfect) and for provenance (who, when, why) information.
+
+Training for entity resolution is pairs of local entity IDs that are duplicates.  These IDs should reference the \texttt{local\_entities} table and be loaded into the \texttt{entity\_matches} table (\texttt{\$DTHOME/entity.sql}).
+
+\subsubsection{Dictionaries and Templates}
+
+Attribute dictionaries should be loaded into the \texttt{global\_data} table, and synonym dictionaries into the \texttt{global\_synonyms} table -- both these tables are defined in \texttt{\$DTHOME/core.sql} and both reference the \texttt{global\_attributes} table.
+
+Attribute templates should be named in the \texttt{templates} table, and their contents specified in the \texttt{attribute\_templates}, which references \texttt{templates} and \texttt{global\_attributes}.  These tables are defined in \texttt{\$DTHOME/nameres/template.sql}, which is not currently loaded by the install script.
+
+\subsubsection{Clean-up}
+
+If at any time you would like to purge Data Tamer and start afresh, two functions are provided for clean-up.  The first, \texttt{unload\_local()}, clears out all data sources that have been loaded into the system, as well as all preprocessed data kept by the schema mapping experts that was derived from these sources.  The second, \texttt{clean\_house()}, clears both local and global data, i.e., it clears global schema, attribute mappings, and global dictionaries in addition to the loaded data sources.  This should accomplish the same effect as dropping the Data Tamer schema and reinstalling from scratch.
+
+
+\subsection{Schema Mapping}
+
+Schema mapping generates suggested mappings from fields in local data sources (in \texttt{local\_fields}) to fields in the global schema (\texttt{global\_attributes}).  Several expert algorithms give suggestion scores and a meta model combines the expert opinions into final scores.
+
+Schema mapping operations include local preprocessing, global preprocessing, and computing results.
+
+Local preprocessing includes tasks like tokenization and computation of weights and frequencies that are used by the expert algorithms.  It only has to be run once for each local data source.  The function \texttt{preprocess\_source( source\_id )}, defined in \texttt{core.sql}, performs all preprocessing for a given source.  Many variants are available, including preprocessing for only individual experts (via \texttt{mdl\_, ngrams\_, qgrams\_}, and \texttt{dist\_preprocess\_source( source\_id )}), and preprocessing for different groups of data (e.g., \texttt{\_field( field\_id ), \_all()}).
+
+Global preprocessing uses the mappings in the \texttt{attribute\_mappings} table to train the various expert models.  The function \texttt{preprocess\_global()} builds each expert model from scratch based on the available attribtue mappings at the time it is run.  Individual expert models can be built by running \texttt{mdl\_, ngrams\_, qgrams\_}, and \texttt{dist\_preprocess\_global()}.  For the moment, these models cannot be updated incrementally as new mappings are added to the system.  Global preprocessing should be run after all local preprocessing is finished, and whenever the experts need to be ``current.''
+
+After local data has been preprocessed, and the expert models are up to date, mapping suggestions can be computed by running \texttt{nr\_results\_for\_all()} or \texttt{nr\_results\_for\_all\_unmapped()} or \texttt{nr\_results\_for\_source( source\_id )}.  These functions are defined in \texttt{\$DTHOME/nameres/name\_resolve.sql}.  Results from individual experts can be obtained by a parallel set of functions whose names replace \texttt{nr} with the appropriate expert name, one of \texttt{mdl, ngrams, qgrams}, or \texttt{diff}.  Results are stored in the \texttt{nr\_raw\_results} table. 
+
+Composite scores are computed by running the \texttt{nr\_composite\_load()} function.  These composite results are based on the individual scores stored in \texttt{nr\_raw\_results}, and themselves are written to \texttt{nr\_ncomp\_results\_tbl} (old results are cleared before new ones are loaded).  These composite results are used by the web interface.
+
+
+\subsection{Entity Resolution}
+
+The entity resolution module is currently in transition, and its operational API is changing frequently.  To be filled in by George B....
+
+An old test module for entity resolution can be found in \texttt{\$DTHOME/entityres/old.sql}.  This module allows simple ER operation on a small test data set, and its use is well documented in the file.
+
+
+\subsection{Web Interface}
+
+Once Django is set up with the desired web server, the Data Tamer web UI will be available at \url{http://local IP/doit/database name/}, where ``local IP'' is the domain or IP address of the host server, and ``database name'' is the name of the PostgreSQL database to which Data Tamer was installed.
+
+If using the Django developer server to host the UI (strongly discouraged in production), then the server can be launched by entering the root directory of the Data Tamer Django application (\texttt{\$DTHOME/www/doitweb/}) and running the command \texttt{python manage.py runserver IP:port}.  You may want to run the Django server in the backgroup or in a separate shell session, e.g., using \texttt{screen}.
+
+The main interface provides an index of loaded sources.  Clicking on a source brings the user to a review interface for schema mapping suggestions, where the user can fix and verify mapping suggestions and save them to the database.  On the index page, there is also a search box that allows the user to search for local fields by name.  The results page is again a schema mapping review interface.
+
+
+\section{Data Tamer Internals --- the Core Schema}
+
+The core Data Tamer tables cover three main categories of objects: \textit{i}. local data objects, i.e., local data sources and their components; \textit{ii}. global data objects, e.g., the global schema and dictionary objects; and \textit{iii}. mappings between local and global objects.
+
+
+\subsection{Local Data Objects}
+
+Data sources that are ingested by Data Tamer to be cleaned and integrated are called local data sources.  Data Tamer operates on data sources that can be modelled as sparse relational tables, i.e., a table that may contain a large number of null values.  Six tables store information about the local sources loaded into the system.
+
+\begin{itemize}
+
+\item \texttt{local\_sources}
+
+This table gives each loaded data source a unique internal ID (column \texttt{id}), and can save an external name or ID as well (column \texttt{local\_id}).  It also has columns for the date each source was loaded, and for the number of unique entities (i.e. rows) belonging to the source.
+
+\item \texttt{local\_fields}
+
+This table holds information about individual columns of the loaded sources.  The \texttt{id} column is the primary key, and \texttt{source\_id} is a foreign key reference to \texttt{local\_sources}.  The three local columns, \texttt{local\_id, local\_name}, and \texttt{local\_desc}, contain external IDs, names, and descriptions, respectively, that belong to the fields.  The remaining fields keep statistics used to inform the proper display order when viewing the fields in tabular form.
+
+\item \texttt{local\_source\_meta} and \texttt{local\_field\_meta}
+
+These tables store arbitrary key-value property pairs that provide meta data about sources and their fields, respectively.
+
+\item \texttt{local\_entities}
+
+As \texttt{local\_fields} stores information about the columns of a source, \texttt{local\_entities} stores information about its rows.  It has a primary key, \texttt{id}, and a foreign key reference to its source in \texttt{local\_sources}, \texttt{source\_id}.
+
+\item \texttt{local\_data}
+
+The actual source data is stored in this table.  Each record is the value contained in one cell of the source table.  The columns \texttt{field\_id} and \texttt{entity\_id} are foreign key references to the cell's column and row in \texttt{local\_fields} and \texttt{local\_entities}, respectively.  The column \texttt{value} stores a string representation of the cell value.  All imported data is stored as text, though some algorithms detect and use other data types.
+
+\end{itemize}
+
+
+\subsection{Global Data Objects}
+
+Global objects include the global schema definition and dictionary objects.  At the moment, the global schema is flat, and all global attributes belong to a single relation.
+
+\begin{itemize}
+
+\item \texttt{global\_attributes}
+
+This table defines the attributes of the global schema.  Each attribute has a unique ID, \texttt{id}, and a name, \texttt{name}, and optionally an ID from an external application in the \texttt{external\_id} column.  The column \texttt{derived\_from} is a free text field to describe any relevant provenance information about the attribute, e.g., who imported it, when, why, and from where.  The remaining columns are statistics used by the schema context and template schema mapping algorithms.
+
+\item \texttt{global\_data}
+
+This table stored dictionaries of data values that belong to particular attributes in the global schema.  For example, a global attribute named ``STATE'' may contain a dictionary of the names of the 50 US states.  \texttt{att\_id} is a FK reference to \texttt{global\_attributes}, and \texttt{value} is a string representation of a dictionary value.  The column \texttt{n} is an integer frequency count that can be used by the cosine similarity experts in Data Tamer.  Ordinarily, \texttt{n} is 1.
+
+\item \texttt{global\_synonyms}
+
+This table stores synonym dictionaries for attributes in the global schema.  For example, in the context of an attribute named ``STATE,'' the values ``Massachusetts'' and ``MA'' may be equivalent.  \texttt{att\_id} is a FK reference to \texttt{global\_attributes}, and \texttt{value\_a} and \texttt{value\_b} store the synonym pair, represented as strings.  Order does not matter.
+
+\end{itemize}
+
+
+\subsection{Mappings}
+
+The core Data Tamer schema has a table for mappings from local source fields to global schema fields.
+
+\begin{itemize}
+
+\item \texttt{attribute\_mappings}
+
+This table maps local fields (\texttt{local\_id} is an FK to \texttt{local\_fields}) to global ones (\texttt{global\_id} is an FK to \texttt{global\_attributes}).  Each mapping has a \texttt{confidence}, the certainty of whoever made the mapping, and an \texttt{authority}, the expertise of the mapper.  Each is a float between zero and one.  \texttt{who\_created}, \texttt{when\_created}, and \texttt{why\_created} store provenance information about each mapping.  Note that mappings are not unique to local fields --- one field may have multiple mappings to the same or different global attributes.
+
+\item \texttt{attribute\_affinities} and \texttt{attribute\_max\_affinities}
+
+\texttt{attribute\_affinities} is a view on \texttt{attribute\_mappings} that aggregates confidence and authority scores for each unique local-to-global attribute pair.  \texttt{attribute\_max\_affinities} is a view on \texttt{attribute\_affinities} that for each local field selects only the mapping with the highest aggregate confidence and authority.
+
+\item \texttt{attribute\_antimappings}
+
+This table has the same schema as \texttt{attribute\_mappings}.  Its records, however, indicate the unlikelihood of a mapping between the given local and global fields.  This table encapsulates negative feedback from the web UI.  It is not currently used by the expert algorithms, but could be in the future.
+
+\item \texttt{attribute\_new\_suggestions}
+
+This table stores suggestions for additions to the global schema.  These suggestions can be made via the web UI.  Records have a FK reference to \texttt{local\_fields} (\texttt{reference\_field\_id}), the \texttt{suggested\_name}, and provenance information.
+
+\end{itemize}
+
+
+\end{document}

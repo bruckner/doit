@@ -1,0 +1,14 @@
+<table style="list-style-type: none;">
+  {% for attr in attrs %}
+    <tr>
+      <td>{{ attr.name }}</td>
+      <td>
+        <select>
+          {% for label in attr.labels %}
+          <option>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </td>
+    </tr>
+  {% endfor %}
+</table>

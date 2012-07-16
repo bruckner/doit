@@ -8,8 +8,11 @@ urlpatterns = patterns('',
     # Example:
     # (r'^doitweb/', include('doitweb.foo.urls')),
 
-    # doit gui
+    # doit gui (first GUI)
     (r'^doit/', include('doit.urls')),
+
+    # data tamer console
+    (r'^tamer/', include('tamer.urls')),
 
     # Uncomment the admin/doc line below to enable admin documentation:
     # (r'^admin/doc/', include('django.contrib.admindocs.urls')),

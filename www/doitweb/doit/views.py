@@ -24,7 +24,7 @@ def mapper(req, sid, dbname):
     meta = dict()
     meta['data'] = db.source_meta(sid)
     meta['category'] = 'Source %s' % sid
-    field_mappings = db.field_mappings_by_source(sid)
+    field_mappings = db.field_mappings_by_source2(sid)
     egs = db.examplevalues(sid)
     for fid in field_mappings:
         egs.setdefault(int(fid), None)

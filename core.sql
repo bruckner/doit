@@ -222,6 +222,7 @@ BEGIN
   DELETE FROM attribute_mappings;
   DELETE FROM global_data;
   PERFORM nr_clean();
+  PERFORM entities_clean();
 END
 $$ LANGUAGE plpgsql;
 

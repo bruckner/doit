@@ -76,7 +76,7 @@ class DoitDB:
         cmd = '''SELECT id, local_name
                    FROM local_fields
                   WHERE source_id = %s
-                    AND n_values > 0
+                    AND (n_values > 0 OR 1 = 1)
                ORDER BY ROUND(sort_factor, 2) ASC, avg_val_len ASC;'''
         cur.execute(cmd, (source_id,))
         fields = []
@@ -225,6 +225,46 @@ class DoitDB:
                     'green': f2c(rec[4] / 1.0), 'red':f2c(1.0 - rec[4] / 2.0)}}
         return fields
 
+    def field_mappings_by_source2(self, source_id):
+        cur = self.conn.cursor()
+        fields = dict()
+        cmd = '''SELECT lf.id, lf.local_name, ama.global_id, ga.name,
+                        ama.who_created
+                   FROM local_fields lf
+              LEFT JOIN attribute_mappings ama
+                     ON lf.id = ama.local_id
+              LEFT JOIN global_attributes ga
+                     ON ama.global_id = ga.id
+                  WHERE lf.source_id = %s;'''
+        cur.execute(cmd, (source_id,))
+        for rec in cur.fetchall():
+            fid, fname, gid, gname, who = rec
+            fields.setdefault(fid, {'id': fid, 'name': fname})
+            if gid is not None:
+                fields[fid]['match'] = {
+                    'id': gid, 'name': gname, 'who_mapped': who,
+                    'is_mapping': True, 'score': 2.0}
+        cmd = '''SELECT lf.id, lf.local_name, nnr.match_id, ga.name, nnr.score
+                   FROM nr_ncomp_results_tbl nnr, local_fields lf,
+                        global_attributes ga
+                  WHERE nnr.field_id = lf.id
+                    AND nnr.source_id = %s
+                    AND nnr.match_id = ga.id
+                    AND (lf.n_values > 0 OR 1 = 1)
+               ORDER BY score desc;'''
+        cur.execute(cmd, (source_id,))
+        for rec in cur.fetchall():
+            fid, fname, gid, gname, score = rec
+            fields[fid].setdefault('match', {
+                'id': gid, 'name': gname, 'score': score,
+                'green': f2c(score / 1.0), 'red':f2c(1.0 - score / 2.0)})
+        for fid in fields:
+            if 'match' not in fields[fid]:
+                fields[fid]['match'] = {'id': 0, 'name': 'Unknown', 'score': 0, 'green': f2c(0), 'red': f2c(1)}
+        return fields
+
+
+
     def field_mappings_by_name(self, field_name, exact_match=False, n=100):
         cur = self.conn.cursor()
         fields = dict()
@@ -371,27 +411,34 @@ class DoitDB:
     # get two entites to compare
     def get_entities_to_compare(self, approx_sim):
         cur = self.conn.cursor()
+#        cmd = '''SELECT entity1_id, entity2_id, similarity
+#                   FROM gbeskales.similar_entities
+#                  WHERE similarity BETWEEN %s - 0.05 AND %s + 0.05
+#               ORDER BY random()
+#                  LIMIT 1;'''
+#        cmd = '''SELECT entity_a, entity_b, similarity
+#                   FROM entity_similarities
+#                  WHERE similarity BETWEEN %s - 0.05 AND %s + 0.05
+#               ORDER BY random()
+#                  LIMIT 1;'''
         cmd = '''SELECT entity_a, entity_b, similarity
-                   FROM entity_similarities
-                  WHERE similarity BETWEEN %s - 0.05 AND %s + 0.05
-               ORDER BY random()
-                  LIMIT 1;'''
-        cur.execute(cmd, (approx_sim, approx_sim,))
+                   FROM public.entity_pair_queue 
+                  WHERE human_label IS NULL 
+               ORDER BY priority DESC 
+                  LIMIT 1;'''		  
+        cur.execute(cmd)
         rec = cur.fetchone()
         e1, e2, s = rec
         return (e1, e2, s)
 
     def entity_data(self, eid):
         cur = self.conn.cursor()
-        cmd = '''SELECT g.id, lf.id, COALESCE(g.name, lf.local_name), ld.value
-                   FROM local_data ld
-             INNER JOIN local_fields lf
-                     ON ld.field_id = lf.id
-              LEFT JOIN (SELECT ga.id, ga.name, am.local_id
-                           FROM global_attributes ga, attribute_mappings am
-                          WHERE ga.id = am.global_id) g
-                     ON lf.id = g.local_id
-                  WHERE ld.entity_id = %s;'''
+        cmd = '''SELECT tag_id, tag_id, lf.tag_code, ld.value
+                   FROM public.doit_data ld
+             INNER JOIN public.doit_fields lf
+                     ON ld.source_id = lf.source_id AND ld.name = lf.name              
+                  WHERE lf.tag_code is not null AND ld.entity_id = %s;'''
+
         cur.execute(cmd, (int(eid),))
         data = {}
         for rec in cur.fetchall():
@@ -404,7 +451,9 @@ class DoitDB:
 
     def save_entity_comparison(self, e1id, e2id, answer):
         cur = self.conn.cursor()
-        cmd = '''UPDATE entity_similarities SET human_label = %s
+#        cmd = '''UPDATE gbeskales.similar_entities SET human_label = %s
+#                  WHERE entity1_id = %s AND entity2_id = %s;'''
+        cmd = '''UPDATE public.entity_pair_queue SET human_label = %s
                   WHERE entity_a = %s AND entity_b = %s;'''
         cur.execute(cmd, (answer, e1id, e2id))
         self.conn.commit()

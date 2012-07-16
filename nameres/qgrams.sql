@@ -46,6 +46,10 @@ CREATE TABLE local_qgrams (
 );
 
 -- globalized attribute qgram relations
+CREATE VIEW global_qgrams_raw AS
+     SELECT id AS att_id, qgrams2(name, 3) gram
+       FROM global_attributes;
+
 CREATE TABLE global_qgrams (
        att_id INTEGER,
        gram TEXT,
@@ -121,10 +125,16 @@ BEGIN
         WHERE lq.field_id = aa.local_id
      GROUP BY aa.global_id, lq.gram;
 
+  INSERT INTO global_qgrams (att_id, gram, c, tf)
+       SELECT att_id, gram, COUNT(*), LN(1 + COUNT(*))
+         FROM global_qgrams_raw
+        WHERE (att_id, gram) NOT IN (SELECT att_id, gram FROM global_qgrams)
+     GROUP BY att_id, gram;
+
   TRUNCATE qgrams_idf;
   INSERT INTO qgrams_idf (gram)
        SELECT DISTINCT gram
-         FROM local_qgrams;
+         FROM (SELECT gram FROM local_qgrams UNION ALL SELECT gram FROM global_qgrams) t;
 
   doc_count := COUNT(*) FROM global_attributes;
 

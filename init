@@ -41,6 +41,11 @@ psql $DBNAME -f nameres/dist.sql >> $OUTFILE 2>&1
 psql $DBNAME -f factor/substrs.sql >> $OUTFILE 2>&1
 psql $DBNAME -f factor/factor.sql >> $OUTFILE 2>&1
 
+#psql $DBNAME -f entity.sql >> $OUTFILE 2>&1
+psql $DBNAME -f entityres/dedup_core.sql >> $OUTFILE 2>&1
+psql $DBNAME -f entityres/general_learning_v1.sql >> $OUTFILE 2>&1
+psql $DBNAME -f entityres/general_dedup_v1.sql >> $OUTFILE 2>&1
+
 cat $OUTFILE | grep 'ERROR'
 
 exit

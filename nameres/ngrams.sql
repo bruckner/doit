@@ -74,7 +74,7 @@ CREATE VIEW global_ngrams_raw AS
 CREATE TABLE global_ngrams (
        att_id INTEGER NOT NULL,
        gram TEXT NOT NULL,
-       c INTEGER NOT NULL,
+       c FLOAT NOT NULL,
        tf FLOAT NULL
 );
 ALTER TABLE global_ngrams ADD PRIMARY KEY (gram, att_id);
@@ -219,7 +219,7 @@ BEGIN
   INSERT INTO global_ngrams (att_id, gram, c)
        SELECT aa.global_id, lvn.gram, SUM(lvn.c * aa.affinity)
          FROM local_ngrams lvn, attribute_affinities aa
-	WHERE lvn.field_id = aa.local_id
+    	WHERE lvn.field_id = aa.local_id
      GROUP BY aa.global_id, lvn.gram;
 
   INSERT INTO global_ngrams (att_id, gram, c)
@@ -241,7 +241,7 @@ BEGIN
 
   INSERT INTO ngrams_idf (gram)
        SELECT DISTINCT gram
-         FROM local_ngrams;
+         FROM global_ngrams;
 
   doc_count := COUNT(*)::FLOAT FROM global_attributes;
 
@@ -329,7 +329,7 @@ BEGIN
 END
 $$ LANGUAGE plpgsql;
 
-
+/* Horribly inefficient`
 CREATE OR REPLACE FUNCTION ngrams_results_for_all_unmapped () RETURNS VOID AS
 $$
 BEGIN
@@ -339,7 +339,7 @@ BEGIN
         WHERE field_id != ALL (ARRAY(SELECT local_id FROM attribute_mappings));
 END
 $$ LANGUAGE plpgsql;
-
+*/
 
 CREATE OR REPLACE FUNCTION ngrams_results_for_source (INTEGER) RETURNS VOID AS
 $$
