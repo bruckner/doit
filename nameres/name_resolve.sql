@@ -58,6 +58,8 @@ CREATE VIEW nr_raw_max_results AS
 	AND r.field_id = m.field_id
 	AND r.method_name = m.method_name;
 
+/* Tables for reviewing Goby results -- not generally applicable
+
 CREATE VIEW nr_raw_nice_results AS
      SELECT pdf.source_id, pdf.name, r.method_name, g.name AS match, r.score,
             (g.name = NULLIF(pdf.tag_code, 'NO_DISPLAY'))::boolean is_correct, pdf.tag_code correct 
@@ -90,6 +92,8 @@ CREATE VIEW nr_raw_error_rates AS
  INNER JOIN nr_field_count f
          ON 1 = 1;
 
+*/
+
 -- ncomp: Naive composite scoring by summing over all raw results the
 -- normalized scores times the method weight.
 CREATE VIEW nr_ncomp_results AS
@@ -113,6 +117,8 @@ CREATE VIEW nr_ncomp_max_results AS
  INNER JOIN (SELECT field_id, MAX(score) score FROM nr_ncomp_results_tbl GROUP BY field_id) m
          ON r.field_id = m.field_id AND r.score = m.score;
 
+/* Tables for reviewing Goby results. Not generally applicable.
+
 CREATE VIEW nr_ncomp_nice_results AS
      SELECT pdf.source_id, pdf.name, g.name AS match, r.score,
             (g.name = NULLIF(pdf.tag_code, 'NO_DISPLAY'))::boolean is_correct, pdf.tag_code correct 
@@ -134,6 +140,7 @@ CREATE VIEW nr_ncomp_error_rates AS
        FROM nr_ncomp_nice_results r, nr_field_count f
    GROUP BY f.c;
 
+*/
 
 -- mcomp: Naive composite scoring by taking only maximum scoring matches
 -- from individual methods, assigning weights to each method, taking max
@@ -155,6 +162,8 @@ CREATE VIEW nr_mcomp_max_results AS
       WHERE r.score = m.score
         AND r.field_id = m.field_id;
 
+/* Tables for reviewing Goby results.  Not generally applicable.
+
 CREATE VIEW nr_mcomp_nice_results AS
      SELECT pdf.source_id, pdf.name, g.name AS match, r.score,
             (g.name = NULLIF(pdf.tag_code, 'NO_DISPLAY'))::boolean is_correct, pdf.tag_code correct 
@@ -175,6 +184,8 @@ CREATE VIEW nr_mcomp_error_rates AS
 	    COUNT(CASE WHEN is_correct OR is_correct IS NULL THEN NULL ELSE 1 END) ratio
        FROM nr_mcomp_nice_results r, nr_field_count f
    GROUP BY f.c;
+
+*/
 
 
 -- Load results for composite scoring methods

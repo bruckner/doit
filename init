@@ -33,15 +33,17 @@ psql $DBNAME -f tokenize.sql >> $OUTFILE 2>&1
 psql $DBNAME -f nameres/training.sql >> $OUTFILE 2>&1
 psql $DBNAME -f nameres/name_resolve.sql >> $OUTFILE 2>&1
 psql $DBNAME -f nameres/qgrams.sql >> $OUTFILE 2>&1
-#psql $DBNAME -f nameres/val_test.sql >> $OUTFILE 2>&1
 psql $DBNAME -f nameres/mdl.sql >> $OUTFILE 2>&1
 psql $DBNAME -f nameres/ngrams.sql >> $OUTFILE 2>&1
 psql $DBNAME -f nameres/dist.sql >> $OUTFILE 2>&1
 
-psql $DBNAME -f factor/substrs.sql >> $OUTFILE 2>&1
-psql $DBNAME -f factor/factor.sql >> $OUTFILE 2>&1
+# Attribute name factoring:
+#psql $DBNAME -f factor/substrs.sql >> $OUTFILE 2>&1
+#psql $DBNAME -f factor/factor.sql >> $OUTFILE 2>&1
 
-#psql $DBNAME -f entity.sql >> $OUTFILE 2>&1
+# Old entity resolver for end-to-end demo:
+psql $DBNAME -f entityres/old.sql >> $OUTFILE 2>&1
+
 psql $DBNAME -f entityres/dedup_core.sql >> $OUTFILE 2>&1
 psql $DBNAME -f entityres/general_learning_v1.sql >> $OUTFILE 2>&1
 psql $DBNAME -f entityres/general_dedup_v1.sql >> $OUTFILE 2>&1
