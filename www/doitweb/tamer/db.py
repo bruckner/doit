@@ -265,14 +265,19 @@ class TamerDB:
         cur.execute(cmd)
         self.conn.commit()
 
-    def rebuild_models(self):
+    def rebuild_dedup_models(self):
         cur = self.conn.cursor()
-        cmd = '''SELECT preprocess_global();
-                 --SELECT learn_weights(0.05, 0.00001, 5, 1000, 0.2);
+        cmd = '''--SELECT learn_weights(0.05, 0.00001, 5, 1000, 0.2);
                  TRUNCATE entity_test_group;
                  INSERT INTO entity_test_group SELECT id FROM local_entities;
                  SELECT entities_preprocess_test_group('t');
                  SELECT entities_weights_from_test_group();'''
+        cur.execute(cmd)
+        self.conn.commit()
+
+    def rebuild_schema_mapping_models(self):
+        cur = self.conn.cursor()
+        cmd = '''SELECT preprocess_global();'''
         cur.execute(cmd)
         self.conn.commit()
 
@@ -313,13 +318,24 @@ class TamerDB:
         self.conn.commit()
 
     # get two entites to compare
-    def get_entities_to_compare(self, approx_sim):
+    def get_entities_to_compare(self, approx_sim, sort):
         cur = self.conn.cursor()
         cmd = '''SELECT entity_a, entity_b, similarity
                    FROM entity_similarities
                ORDER BY random()
                   LIMIT 1;'''
-        cur.execute(cmd)
+        if sort == 'high':
+            cmd = '''SELECT entity_a, entity_b, similarity FROM entity_similarities
+                      WHERE human_label IS NULL ORDER BY similarity DESC;'''
+        if approx_sim is not None:
+            cmd = '''SELECT entity_a, entity_b, similarity
+                       FROM entity_similarities
+                      WHERE similarity BETWEEN %s - 0.05 AND %s + 0.05
+                   ORDER BY random()
+                      LIMIT 1;'''
+            cur.execute(cmd, (approx_sim, approx_sim))
+        else:
+            cur.execute(cmd)
         rec = cur.fetchone()
         e1, e2, s = rec
         return (e1, e2, s)
@@ -354,7 +370,4 @@ class TamerDB:
             cmd = '''INSERT INTO entity_matches SELECT %s, %s;'''
             cur.execute(cmd, (e1id, e2id))
         self.conn.commit()
-                                               
-
-
 

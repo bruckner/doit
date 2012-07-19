@@ -87,8 +87,8 @@ def compare_entities(req, dbname):
     db = TamerDB(dbname)
     save_entity_comparison_feedback(req, db)
     target_similarity = req.GET['sim'] if 'sim' in req.GET \
-        else '0.' + str(random.randint(0, 9))
-    eid1, eid2, sim = db.get_entities_to_compare(target_similarity)
+        else None
+    eid1, eid2, sim = db.get_entities_to_compare(target_similarity, req.GET['sort'] if 'sort' in req.GET else None)
     e1 = {'id': eid1, 'data': db.entity_data(eid1)}
     e2 = {'id': eid2, 'data': db.entity_data(eid2)}
     guess = 'Yes' if sim > 0.6 else 'No'
@@ -293,7 +293,7 @@ def import_auxiliary(req, dbname):
 
 def schema_map_source(req, dbname, sid):
     db = TamerDB(dbname)
-    db.rebuild_models()
+    db.rebuild_schema_mapping_models()
     db.schema_map_source(sid)
     redirect_url = '/doit/' + dbname + '/sources/' + sid + '/map'
     return HttpResponse(simplejson.dumps({'redirect': redirect_url}),
