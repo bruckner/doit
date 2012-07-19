@@ -239,6 +239,10 @@ BEGIN
          avg_mismatch = sum_mismatch::FLOAT / n_mismatch
    WHERE n_match > 0 AND n_mismatch > 0;
 
+  UPDATE training_stats
+     SET avg_match = 1, avg_mismatch = 1
+   WHERE n_match = 0 OR n_mismatch = 0;
+
   UPDATE entity_field_weights w
      SET weight = (initial_bias * GREATEST(100 - n_match, 0) / 100) + entities_weight_formula(avg_match, avg_mismatch) * LEAST(n_match, 100) / 100
     FROM training_stats s

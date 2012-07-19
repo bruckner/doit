@@ -292,6 +292,7 @@ class TamerDB:
 
     def dedup_source(self, sid):
         cur = self.conn.cursor()
+        self.rebuild_dedup_models()
         cmd = '''TRUNCATE entity_test_group;
                  INSERT INTO entity_test_group
                       SELECT id FROM local_entities WHERE source_id = %s;
@@ -308,6 +309,7 @@ class TamerDB:
 
     def dedup_all(self):
         cur = self.conn.cursor()
+        self.rebuild_dedup_models()
         cmd = '''TRUNCATE entity_test_group;
                  INSERT INTO entity_test_group
                       SELECT id FROM local_entities;
