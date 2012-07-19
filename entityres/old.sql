@@ -236,7 +236,8 @@ BEGIN
 
   UPDATE training_stats
      SET avg_match = sum_match::FLOAT / n_match,
-         avg_mismatch = sum_mismatch::FLOAT / n_mismatch;
+         avg_mismatch = sum_mismatch::FLOAT / n_mismatch
+   WHERE n_match > 0 AND n_mismatch > 0;
 
   UPDATE entity_field_weights w
      SET weight = (initial_bias * GREATEST(100 - n_match, 0) / 100) + entities_weight_formula(avg_match, avg_mismatch) * LEAST(n_match, 100) / 100
@@ -315,6 +316,15 @@ BEGIN
   END IF;
 
   entity_size := SUM(weight) FROM entity_field_weights;
+  CREATE TEMP TABLE entity_sizes AS
+       SELECT t.entity_id, SUM(weight)
+         FROM (
+                SELECT entity_id, field_id FROM entity_tokens
+                 WHERE entity_id IN (SELECT * FROM entity_test_group)
+              GROUP BY entity_id, field_id
+              ) t, entity_field_weights w
+        WHERE t.field_id = w.field_id
+     GROUP BY t.entity_id;
 
   /* Clean out any old calculations */
   DELETE FROM entity_similarities
@@ -326,9 +336,13 @@ BEGIN
    */
   INSERT INTO entity_similarities
        SELECT cs.entity_a, cs.entity_b, SUM(fw.weight * cs.similarity),
-              SUM(fw.weight * cs.similarity) / entity_size
-         FROM entity_field_cosine_similarities cs, entity_field_weights fw
+              SUM(fw.weight * cs.similarity) / GREATEST(s1.sum, s2.sum)
+         FROM entity_field_cosine_similarities cs, entity_field_weights fw,
+              entity_sizes s1, entity_sizes s2
         WHERE cs.field_id = fw.field_id
-     GROUP BY cs.entity_a, cs.entity_b;
+          AND cs.entity_a = s1.entity_id AND cs.entity_b = s2.entity_id
+     GROUP BY cs.entity_a, cs.entity_b, s1.sum, s2.sum;
+
+  DROP TABLE entity_sizes;
 END
 $$ LANGUAGE plpgsql;
