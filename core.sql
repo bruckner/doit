@@ -24,6 +24,7 @@ CREATE TABLE local_sources (
 	id serial,
 	local_id text,
     n_entities INTEGER,
+    n_fields INTEGER,
     date_added TIMESTAMP
 );
 
